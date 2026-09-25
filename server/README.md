@@ -35,6 +35,8 @@ docker compose up --build
 - `GET /api/v1/hasJoined`, `POST /api/v1/join`, `GET /api/v1/profile` — Yggdrasil-сессия
 - `GET /api/v1/mods/manifest` — обязательные моды (`loader`, `mc_version`)
 - `GET /api/v1/mods/optional` — каталог опциональных модов
+- `POST /api/v1/players/me/skin`, `.../cape` — загрузка скина/плаща (multipart:
+  `uuid`+`access_token`+`file`), отдаются через `/textures/{skin|cape}/{hash}.png`
 
 Полная OpenAPI-схема — на `/docs` после запуска.
 

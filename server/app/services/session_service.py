@@ -7,14 +7,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.crud import crud_player
 from app.models.player import Player
+from app.services import texture_storage
 from app.services.errors import ServiceError
 
 _HEX32_RE = re.compile(r"^[a-f0-9]{32}$")
 _SERVER_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{39,41}$")
 
-# TODO: скины/плащи — отдельная задача (хранение текстур + сборка URL, как в
-# authlib_skinfix_by_TaoGunner-2/config.php::getSkinURL). Пока профиль отдаётся
-# без textures, чтобы не блокировать auth/join/mods.
+
+def _build_textures(player: Player) -> dict:
+    """Формат как в PHP-версии TaoGunner (config.php::getProfile) —
+    {"SKIN": {"url": ...}, "CAPE": {"url": ...}}, ключ отсутствует, если у
+    игрока нет загруженной текстуры этого типа."""
+    textures = {}
+    if player.skin_hash:
+        textures["SKIN"] = {"url": texture_storage.texture_url("skin", player.skin_hash)}
+    if player.cape_hash:
+        textures["CAPE"] = {"url": texture_storage.texture_url("cape", player.cape_hash)}
+    return textures
 
 
 def build_profile(player: Player) -> dict:
@@ -22,7 +31,7 @@ def build_profile(player: Player) -> dict:
         "timestamp": int(time.time() * 1000),
         "profileId": player.uuid,
         "profileName": player.username,
-        "textures": {},
+        "textures": _build_textures(player),
     }
     return {
         "id": player.uuid,

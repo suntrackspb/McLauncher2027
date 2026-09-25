@@ -46,6 +46,7 @@ coverage.xml
 *.sqlite3
 *.sqlite3-journal
 alembic.ini.local
+server/storage/
 
 # === Секреты и конфиги окружения ===
 .env

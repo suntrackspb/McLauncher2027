@@ -15,5 +15,11 @@ class Settings(BaseSettings):
     launcher_asset_windows_hint: str = "windows"
     launcher_asset_macos_hint: str = "macos"
 
+    # Публичный адрес бэкенда — нужен, чтобы собрать абсолютный URL текстуры
+    # для Yggdrasil-профиля (клиент/Forge не умеют в относительные ссылки).
+    # По аналогии со статическим $URL_SKINS в PHP-версии TaoGunner.
+    public_base_url: str = ""
+    textures_storage_dir: str = "./storage/textures"
+
 
 settings = Settings()

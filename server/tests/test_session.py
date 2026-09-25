@@ -53,3 +53,30 @@ async def test_profile_by_uuid(client):
     resp = await client.get("/api/v1/profile", params={"uuid": login["UUID"]})
     assert resp.status_code == 200
     assert resp.json()["name"] == login["username"]
+
+
+async def test_profile_includes_textures_after_skin_upload(client, tmp_path, monkeypatch):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "textures_storage_dir", str(tmp_path))
+    monkeypatch.setattr(settings, "public_base_url", "http://test.local")
+
+    login = await _register_and_login(client)
+    fake_png = b"\x89PNG\r\n\x1a\n" + b"fake-content"
+    upload_resp = await client.post(
+        "/api/v1/players/me/skin",
+        data={"uuid": login["UUID"], "access_token": login["accessToken"]},
+        files={"file": ("skin.png", fake_png, "image/png")},
+    )
+    skin_hash = upload_resp.json()["hash"]
+
+    resp = await client.get("/api/v1/profile", params={"uuid": login["UUID"]})
+    assert resp.status_code == 200
+
+    import base64
+    import json
+
+    properties = resp.json()["properties"][0]
+    payload = json.loads(base64.b64decode(properties["value"]))
+    assert payload["textures"]["SKIN"]["url"] == f"http://test.local/textures/skin/{skin_hash}.png"
+    assert "CAPE" not in payload["textures"]
