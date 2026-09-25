@@ -1,0 +1,107 @@
+name: Client build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+    paths:
+      - "client/**"
+      - ".github/workflows/client-build.yml"
+  pull_request:
+    paths:
+      - "client/**"
+      - ".github/workflows/client-build.yml"
+  workflow_dispatch: {}
+
+concurrency:
+  group: client-build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  APP_NAME: McLauncher2027
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows
+          - os: macos-latest
+            platform: macos
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r requirements.txt
+
+      - run: python -m pytest -q
+
+      # onedir (не onefile) + collect_all("webview") в build.spec: pywebview
+      # везёт свои платформенные бэкенды и JS-файлы динамически, без спеки
+      # PyInstaller их не видит и сборка падает пустым окном на чистой машине.
+      - name: Build launcher
+        run: pyinstaller --noconfirm --clean build.spec
+
+      - name: Build updater
+        run: pyinstaller updater/app_updater.py --name app_updater --onefile --noconfirm
+
+      - name: Ad-hoc sign (macOS)
+        if: matrix.platform == 'macos'
+        # Без подписи Gatekeeper объявляет скачанный .app «повреждённым» —
+        # платного сертификата разработчика для этого проекта нет.
+        run: |
+          codesign --force --deep --sign - "dist/${APP_NAME}.app"
+          codesign --verify --deep --strict --verbose=2 "dist/${APP_NAME}.app"
+
+      - name: Package (Windows)
+        if: matrix.platform == 'windows'
+        working-directory: client/dist
+        shell: pwsh
+        # app_updater.exe должен быть СОСЕДОМ папки лаунчера в архиве, а не
+        # внутри неё: при обновлении заменяется вся папка целиком, а Windows
+        # не даст переименовать директорию, пока внутри неё же выполняется
+        # запущенный из неё же app_updater.exe (см. ui_bridge/api.py).
+        run: Compress-Archive -Path "$env:APP_NAME", "app_updater.exe" -DestinationPath "$env:APP_NAME-windows.zip"
+
+      - name: Package (macOS)
+        if: matrix.platform == 'macos'
+        working-directory: client/dist
+        # app_updater — сосед .app-бандла (не внутри Contents/), по той же
+        # причине, что и на Windows (см. комментарий в шаге для Windows).
+        run: zip -r "$APP_NAME-macos.zip" "$APP_NAME.app" app_updater
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APP_NAME }}-${{ matrix.platform }}
+          path: client/dist/${{ env.APP_NAME }}-${{ matrix.platform }}.zip
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          fail_on_unmatched_files: true
+          files: artifacts/*

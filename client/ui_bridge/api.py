@@ -1,14 +1,15 @@
+import platform
 import subprocess
 import sys
 import threading
 from dataclasses import asdict, replace
-from pathlib import Path
 
 import webview
 
 from core.api_client.client import ApiClient, ApiError
 from core.launch.pipeline import prepare_and_get_launch_command
 from core.settings.store import SettingsStore, get_app_data_dir
+from core.updater.paths import resolve_launcher_path
 from core.updater.version_check import check_for_update
 from ui_bridge.config import AUTHLIB_PATCHED_DIR, APP_FOLDER_NAME, BACKEND_URL, LAUNCHER_VERSION, PROFILE
 from ui_bridge.reporter import WebviewProgressReporter
@@ -67,10 +68,13 @@ class LauncherApi:
         if not getattr(sys, "frozen", False):
             return {"ok": False, "error": "Обновление доступно только в собранной версии лаунчера"}
 
-        launcher_path = Path(sys.executable)
-        updater_path = launcher_path.parent / (
-            "app_updater.exe" if launcher_path.suffix == ".exe" else "app_updater"
-        )
+        launcher_path = resolve_launcher_path(sys.executable)
+        # app_updater лежит РЯДОМ с папкой/бандлом лаунчера, не внутри — иначе
+        # на Windows подмену заблокирует хендл самого запущенного updater.exe
+        # (см. client/build.spec и .github/workflows/client-build.yml: оба
+        # выкладываются в архив как соседние top-level записи).
+        updater_name = "app_updater.exe" if platform.system() == "Windows" else "app_updater"
+        updater_path = launcher_path.parent / updater_name
         if not updater_path.exists():
             return {"ok": False, "error": "Updater не найден рядом с лаунчером"}
 

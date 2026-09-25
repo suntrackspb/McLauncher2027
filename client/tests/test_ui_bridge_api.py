@@ -1,3 +1,5 @@
+import platform
+
 from core.api_client.client import ApiError
 from core.settings.store import LauncherSettings
 from ui_bridge.api import LauncherApi
@@ -131,6 +133,36 @@ def test_start_update_fails_in_dev_mode(tmp_path, mocker):
     api = _api_with_tmp_settings(tmp_path, mocker)
     result = api.start_update("http://x/win.zip")
     assert result == {"ok": False, "error": "Обновление доступно только в собранной версии лаунчера"}
+
+
+def test_start_update_fails_when_updater_missing(tmp_path, mocker):
+    api = _api_with_tmp_settings(tmp_path, mocker)
+    mocker.patch("ui_bridge.api.sys.frozen", True, create=True)
+    mocker.patch("ui_bridge.api.sys.executable", str(tmp_path / "Launcher" / "Launcher.exe"))
+
+    result = api.start_update("http://x/win.zip")
+
+    assert result == {"ok": False, "error": "Updater не найден рядом с лаунчером"}
+
+
+def test_start_update_launches_sibling_updater_and_closes_window(tmp_path, mocker):
+    api = _api_with_tmp_settings(tmp_path, mocker)
+    install_root = tmp_path / "install"
+    launcher_dir = install_root / "Launcher"
+    launcher_dir.mkdir(parents=True)
+    updater_name = "app_updater.exe" if platform.system() == "Windows" else "app_updater"
+    (install_root / updater_name).write_bytes(b"stub")
+
+    mocker.patch("ui_bridge.api.sys.frozen", True, create=True)
+    mocker.patch("ui_bridge.api.sys.executable", str(launcher_dir / "Launcher.exe"))
+    popen_mock = mocker.patch("ui_bridge.api.subprocess.Popen")
+    api._window = mocker.Mock()
+
+    result = api.start_update("http://x/win.zip")
+
+    assert result == {"ok": True}
+    popen_mock.assert_called_once()
+    api._window.destroy.assert_called_once()
 
 
 def test_get_optional_mods_wraps_api_error(tmp_path, mocker):

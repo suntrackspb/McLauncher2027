@@ -23,6 +23,7 @@ env.bak/
 venv.bak/
 
 # PyInstaller
+*.spec
 *.spec.bak
 *.manifest
 

@@ -9,9 +9,11 @@
 подменить старую копию новой -> запустить обновлённый лаунчер.
 
 Адаптировано из older_projects/_Launcher/app_updater.py: та же логика поиска
-процесса/ожидания закрытия, но подмена файла сделана кроссплатформенной —
-на Windows заменяется один .exe, на macOS заменяется весь .app бандл
-(директория), а не файл.
+процесса/ожидания закрытия, но подмена файла сделана кроссплатформенной — и
+на Windows, и на macOS PyInstaller собирает лаунчер в виде папки (onedir/
+.app-бандл, см. client/build.spec), поэтому апдейтер всегда подменяет целиком
+директорию, а не отдельный файл (см. core/updater/paths.py::resolve_launcher_path,
+который приводит переданный из ui_bridge путь к нужному корню).
 """
 
 import logging
@@ -43,6 +45,9 @@ def _is_macos_bundle(path: Path) -> bool:
 
 
 def find_launcher_process(launcher_path: Path) -> psutil.Process | None:
+    """`launcher_path` — всегда директория (onedir-папка или .app-бандл, см.
+    resolve_launcher_path), поэтому ищем процесс, чей exe лежит где-то внутри
+    неё, а не сравниваем пути напрямую."""
     launcher_path = launcher_path.resolve()
     for proc in psutil.process_iter(["pid", "exe"]):
         try:
@@ -50,10 +55,7 @@ def find_launcher_process(launcher_path: Path) -> psutil.Process | None:
             if not exe:
                 continue
             exe_path = Path(exe).resolve()
-            if _is_macos_bundle(launcher_path):
-                if launcher_path in exe_path.parents:
-                    return proc
-            elif exe_path == launcher_path:
+            if launcher_path in exe_path.parents:
                 return proc
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, OSError, ValueError):
             continue
@@ -105,12 +107,16 @@ def extract_new_version(zip_path: Path, extract_dir: Path, launcher_path: Path) 
 
     if _is_macos_bundle(launcher_path):
         candidates = list(extract_dir.rglob("*.app"))
-    else:
-        candidates = list(extract_dir.rglob("*.exe"))
+        if not candidates:
+            raise RuntimeError("В архиве не найден новый лаунчер")
+        return candidates[0]
 
-    if not candidates:
+    # Windows onedir: в архиве лежит папка с exe и зависимостями — нужно
+    # вернуть саму эту папку (родителя exe), а не файл.
+    exe_candidates = list(extract_dir.rglob("*.exe"))
+    if not exe_candidates:
         raise RuntimeError("В архиве не найден новый лаунчер")
-    return candidates[0]
+    return exe_candidates[0].parent
 
 
 def replace_launcher(launcher_path: Path, new_path: Path) -> None:
@@ -137,10 +143,18 @@ def relaunch(launcher_path: Path) -> None:
     log.info("Запуск обновлённого лаунчера...")
     if _is_macos_bundle(launcher_path):
         subprocess.Popen(["open", str(launcher_path)])
-    elif platform.system() == "Windows":
-        subprocess.Popen([str(launcher_path)], creationflags=subprocess.CREATE_NEW_CONSOLE)
-    else:
-        subprocess.Popen([str(launcher_path)])
+        return
+
+    if platform.system() == "Windows":
+        exe_candidates = list(launcher_path.glob("*.exe"))
+        if not exe_candidates:
+            log.error("Не найден исполняемый файл лаунчера в %s", launcher_path)
+            return
+        creation_flags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
+        subprocess.Popen([str(exe_candidates[0])], creationflags=creation_flags)
+        return
+
+    subprocess.Popen([str(launcher_path)])
 
 
 def run(launcher_path: str, download_url: str) -> bool:
