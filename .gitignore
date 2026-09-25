@@ -24,6 +24,7 @@ venv.bak/
 
 # PyInstaller
 *.spec
+!client/build.spec
 *.spec.bak
 *.manifest
 

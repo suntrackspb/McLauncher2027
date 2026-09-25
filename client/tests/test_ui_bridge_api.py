@@ -98,7 +98,7 @@ def test_get_optional_mods_marks_enabled_flag(tmp_path, mocker):
 def test_check_for_update_reports_no_update(tmp_path, mocker):
     api = _api_with_tmp_settings(tmp_path, mocker)
     mocker.patch.object(
-        api._api_client, "get_launcher_version", return_value={"version": "1.0.0", "download_url_windows": "x"}
+        api._api_client, "get_launcher_version", return_value={"version": "v1.0.0", "download_url_windows": "x"}
     )
     result = api.check_for_update()
     assert result == {"ok": True, "update_available": False}
