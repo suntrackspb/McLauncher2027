@@ -15,8 +15,10 @@
 - `sync/` — диффует манифест модов с бэка против локальной папки `mods/`:
   обязательные качаются всегда, опциональные — только включённые в settings,
   всё лишнее в папке удаляется.
-- `launch/` — подмена `authlib-<версия>.jar` на пропатченную версию с адресом
-  нашего бэкенда (см. ниже).
+- `launch/` — подмена `authlib-<версия>.jar` (см. ниже) + `pipeline.py`,
+  который связывает install лоадера -> sync модов -> patch authlib -> сборку
+  launch-команды (`minecraft_launcher_lib.command.get_minecraft_command`) в
+  одну функцию `prepare_and_get_launch_command`, которую дёргает `ui_bridge`.
 
 ## Запуск тестов
 
