@@ -1,0 +1,6 @@
+version: 2
+
+secret:
+  ignored-paths:
+    # Тестовые фикстуры с заведомо фиктивными паролями (register/login тесты бэкенда).
+    - "server/tests/**"

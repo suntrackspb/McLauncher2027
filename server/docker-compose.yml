@@ -1,0 +1,23 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: launcher
+      POSTGRES_PASSWORD: launcher
+      POSTGRES_DB: launcher
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+  backend:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: postgresql+asyncpg://launcher:launcher@db/launcher
+    ports:
+      - "8000:8000"
+
+volumes:
+  db_data:
