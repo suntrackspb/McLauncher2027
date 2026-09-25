@@ -1,0 +1,7 @@
+pywebview==6.2.1
+requests==2.34.2
+minecraft-launcher-lib==8.0
+psutil==6.1.0
+pytest==8.3.3
+pytest-mock==3.14.0
+pyinstaller==6.10.0
