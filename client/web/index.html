@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>McLauncher2027</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div id="app">
+
+  <!-- Загрузка -->
+  <section id="screen-loading" class="screen active">
+    <div class="loader-ring"></div>
+    <p class="loader-text">Инициализация…</p>
+  </section>
+
+  <!-- Вход / регистрация -->
+  <section id="screen-auth" class="screen">
+    <div class="auth-card">
+      <div class="brand">
+        <div class="brand-logo">MC</div>
+        <h1>McLauncher<span class="accent">2027</span></h1>
+      </div>
+
+      <div class="tabs">
+        <button class="tab active" data-tab="login">Вход</button>
+        <button class="tab" data-tab="register">Регистрация</button>
+      </div>
+
+      <form id="form-login" class="tab-panel active" data-panel="login">
+        <label>Никнейм
+          <input type="text" name="username" autocomplete="username" required maxlength="16" />
+        </label>
+        <label>Пароль
+          <input type="password" name="password" autocomplete="current-password" required />
+        </label>
+        <button type="submit" class="btn btn-primary">Войти</button>
+      </form>
+
+      <form id="form-register" class="tab-panel" data-panel="register">
+        <label>Никнейм
+          <input type="text" name="username" required maxlength="16" pattern="[A-Za-z][A-Za-z0-9_]{2,15}" />
+        </label>
+        <label>Пароль
+          <input type="password" name="password" required minlength="4" />
+        </label>
+        <button type="submit" class="btn btn-primary">Создать аккаунт</button>
+      </form>
+
+      <p id="auth-error" class="error-text" hidden></p>
+    </div>
+  </section>
+
+  <!-- Главный экран -->
+  <section id="screen-main" class="screen">
+    <header class="topbar">
+      <div class="brand brand-compact">
+        <div class="brand-logo small">MC</div>
+        <span>McLauncher<span class="accent">2027</span></span>
+      </div>
+      <div class="topbar-actions">
+        <span id="current-username" class="username-pill"></span>
+        <button id="btn-settings" class="icon-btn" title="Настройки" aria-label="Настройки"></button>
+        <button id="btn-mods" class="icon-btn" title="Опциональные моды" aria-label="Моды"></button>
+        <button id="btn-logout" class="icon-btn" title="Выйти" aria-label="Выйти"></button>
+      </div>
+    </header>
+
+    <main class="main-content">
+      <div class="play-card">
+        <button id="btn-play" class="play-button">
+          <span class="play-icon"></span>
+          <span class="play-label">ИГРАТЬ</span>
+        </button>
+
+        <div class="progress-wrap">
+          <p id="status-text" class="status-text">Готово к запуску</p>
+          <div class="progress-bar">
+            <div id="progress-fill" class="progress-fill"></div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </section>
+
+  <!-- Панель настроек -->
+  <aside id="panel-settings" class="side-panel">
+    <div class="side-panel-header">
+      <h2>Настройки</h2>
+      <button class="icon-btn close-btn" data-close="panel-settings"></button>
+    </div>
+    <div class="side-panel-body">
+      <label>Оперативная память: <span id="ram-value">4096</span> МБ
+        <input type="range" id="input-ram" min="1024" max="16384" step="512" value="4096" />
+      </label>
+      <label>Ширина окна
+        <input type="number" id="input-width" min="800" max="7680" value="1280" />
+      </label>
+      <label>Высота окна
+        <input type="number" id="input-height" min="600" max="4320" value="720" />
+      </label>
+      <label class="checkbox-row">
+        <input type="checkbox" id="input-fullscreen" />
+        Полноэкранный режим
+      </label>
+      <label>Путь к Java (необязательно)
+        <div class="input-with-button">
+          <input type="text" id="input-java-path" placeholder="Определится автоматически" />
+          <button id="btn-browse-java" class="btn btn-secondary" type="button">Обзор…</button>
+        </div>
+      </label>
+      <label>Доп. аргументы JVM
+        <input type="text" id="input-jvm-args" placeholder="-XX:MaxPermSize=256M" />
+      </label>
+      <label>Доп. аргументы игры
+        <input type="text" id="input-game-args" placeholder="--server 127.0.0.1" />
+      </label>
+      <button id="btn-save-settings" class="btn btn-secondary">Сохранить</button>
+    </div>
+  </aside>
+
+  <!-- Панель опциональных модов -->
+  <aside id="panel-mods" class="side-panel">
+    <div class="side-panel-header">
+      <h2>Опциональные моды</h2>
+      <button class="icon-btn close-btn" data-close="panel-mods"></button>
+    </div>
+    <div class="side-panel-body">
+      <ul id="mods-list" class="mods-list"></ul>
+    </div>
+  </aside>
+
+  <div id="overlay" class="overlay"></div>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>

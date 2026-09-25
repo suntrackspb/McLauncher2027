@@ -27,6 +27,10 @@ class LauncherSettings:
     ram_mb: int = 4096
     resolution_width: int = 1280
     resolution_height: int = 720
+    fullscreen: bool = False
+    java_path: str = ""
+    jvm_arguments_extra: str = ""
+    game_arguments_extra: str = ""
     install_path: str = ""
     # ID опциональных модов (из /mods/optional), которые игрок себе включил —
     # хранится только локально, на сервер не синкается (решение из DEV_PLAN.md).

@@ -4,7 +4,7 @@ import minecraft_launcher_lib as mll
 
 from core.api_client.client import ApiClient
 from core.launch.authlib_patch import patch_authlib_jars
-from core.launch.options_builder import ServerProfile, build_launch_options
+from core.launch.options_builder import ServerProfile, build_extra_game_arguments, build_launch_options
 from core.loaders.base import ProgressReporter
 from core.loaders.factory import get_loader
 from core.settings.store import LauncherSettings
@@ -53,4 +53,6 @@ def prepare_and_get_launch_command(
         profile=profile,
         minecraft_directory=minecraft_directory,
     )
-    return mll.command.get_minecraft_command(version_id, minecraft_directory, options)
+    command = mll.command.get_minecraft_command(version_id, minecraft_directory, options)
+    command.extend(build_extra_game_arguments(settings))
+    return command

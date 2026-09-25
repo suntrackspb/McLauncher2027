@@ -1,3 +1,4 @@
+import shlex
 from dataclasses import dataclass
 
 from core.settings.store import LauncherSettings
@@ -15,10 +16,12 @@ class ServerProfile:
     server_port: int
 
 
-def build_jvm_arguments(ram_mb: int) -> list[str]:
+def build_jvm_arguments(ram_mb: int, extra: str = "") -> list[str]:
     """G1GC-тюнинг и fml-флаги — перенесены из TECH_CONTEXT.md старого
-    `_Launcher` (проверенный на практике набор для Forge на 2 неделях НГ-сессии)."""
-    return [
+    `_Launcher` (проверенный на практике набор для Forge на 2 неделях НГ-сессии).
+    `extra` — сырая строка доп. JVM-аргументов из настроек (по образцу поля
+    "Arguments" в TLauncher), разбивается с учётом кавычек через shlex."""
+    args = [
         f"-Xmx{ram_mb}M",
         f"-Xms{min(ram_mb, 1024)}M",
         "-XX:+UnlockExperimentalVMOptions",
@@ -30,6 +33,9 @@ def build_jvm_arguments(ram_mb: int) -> list[str]:
         "-Dfml.ignoreInvalidMinecraftCertificates=true",
         "-Dfml.ignorePatchDiscrepancies=true",
     ]
+    if extra.strip():
+        args.extend(shlex.split(extra))
+    return args
 
 
 def build_launch_options(
@@ -41,11 +47,11 @@ def build_launch_options(
     profile: ServerProfile,
     minecraft_directory: str,
 ) -> dict:
-    return {
+    options: dict = {
         "username": username,
         "uuid": uuid,
         "token": access_token,
-        "jvmArguments": build_jvm_arguments(settings.ram_mb),
+        "jvmArguments": build_jvm_arguments(settings.ram_mb, settings.jvm_arguments_extra),
         "launcherName": "McLauncher2027",
         "launcherVersion": "1.0.0",
         "gameDirectory": minecraft_directory,
@@ -55,3 +61,18 @@ def build_launch_options(
         "server": profile.server_address,
         "port": str(profile.server_port),
     }
+    if settings.java_path.strip():
+        options["executablePath"] = settings.java_path.strip()
+    return options
+
+
+def build_extra_game_arguments(settings: LauncherSettings) -> list[str]:
+    """Флаги, которые minecraft-launcher-lib не поддерживает через options-dict
+    (fullscreen, произвольные game-аргументы) — добавляются поверх готовой
+    команды запуска в pipeline.py."""
+    args: list[str] = []
+    if settings.fullscreen:
+        args.append("--fullscreen")
+    if settings.game_arguments_extra.strip():
+        args.extend(shlex.split(settings.game_arguments_extra))
+    return args
