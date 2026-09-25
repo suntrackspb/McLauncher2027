@@ -37,6 +37,11 @@ docker compose up --build
 - `GET /api/v1/mods/optional` — каталог опциональных модов
 - `POST /api/v1/players/me/skin`, `.../cape` — загрузка скина/плаща (multipart:
   `uuid`+`access_token`+`file`), отдаются через `/textures/{skin|cape}/{hash}.png`
+- `POST /api/v1/admin/login` — пароль → JWT (12ч); `GET/POST /api/v1/admin/mods`,
+  `DELETE /api/v1/admin/mods/{id}` — управление списком модов (Bearer-токен),
+  загруженные jar-файлы отдаются через `/mod-files/{hash}.jar`. Пароль
+  администратора — `ADMIN_PASSWORD` в `.env`, либо генерируется при первом
+  запуске и печатается в консоль (см. `app/core/admin_auth.py`)
 
 Полная OpenAPI-схема — на `/docs` после запуска.
 

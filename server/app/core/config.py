@@ -20,6 +20,17 @@ class Settings(BaseSettings):
     # По аналогии со статическим $URL_SKINS в PHP-версии TaoGunner.
     public_base_url: str = ""
     textures_storage_dir: str = "./storage/textures"
+    mods_storage_dir: str = "./storage/mods"
+
+    # Пароль администратора для /api/v1/admin/login. Если не задан явно —
+    # генерируется случайно при первом запуске и сохраняется в
+    # `<state_dir>/admin_password.txt` (см. app/core/admin_auth.py), чтобы не
+    # меняться между перезапусками и не требовать отдельной админ-регистрации.
+    admin_password: str = ""
+    # Секрет для подписи JWT админ-токенов — та же логика: задан в .env или
+    # сгенерирован один раз и сохранён в `<state_dir>/admin_jwt_secret.txt`.
+    admin_jwt_secret: str = ""
+    admin_state_dir: str = "./storage"
 
 
 settings = Settings()
