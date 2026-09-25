@@ -21,10 +21,14 @@ def test_update_available_when_versions_differ(mocker):
             "version": "1.1.0",
             "download_url_windows": "http://x/win.zip",
             "download_url_macos": "http://x/mac.zip",
+            "updater_url_windows": "http://x/updater-win.exe",
+            "updater_url_macos": "http://x/updater-mac",
         }
     )
     result = check_for_update("1.0.0", api)
-    assert result == UpdateInfo(version="1.1.0", download_url="http://x/win.zip")
+    assert result == UpdateInfo(
+        version="1.1.0", download_url="http://x/win.zip", updater_url="http://x/updater-win.exe"
+    )
 
 
 def test_picks_macos_url_on_darwin(mocker):
@@ -34,13 +38,39 @@ def test_picks_macos_url_on_darwin(mocker):
             "version": "1.1.0",
             "download_url_windows": "http://x/win.zip",
             "download_url_macos": "http://x/mac.zip",
+            "updater_url_windows": "http://x/updater-win.exe",
+            "updater_url_macos": "http://x/updater-mac",
         }
     )
     result = check_for_update("1.0.0", api)
-    assert result == UpdateInfo(version="1.1.0", download_url="http://x/mac.zip")
+    assert result == UpdateInfo(
+        version="1.1.0", download_url="http://x/mac.zip", updater_url="http://x/updater-mac"
+    )
 
 
 def test_no_update_when_download_url_missing_for_platform(mocker):
     mocker.patch("core.updater.version_check.platform.system", return_value="Darwin")
-    api = _FakeApiClient({"version": "1.1.0", "download_url_windows": "http://x/win.zip", "download_url_macos": ""})
+    api = _FakeApiClient(
+        {
+            "version": "1.1.0",
+            "download_url_windows": "http://x/win.zip",
+            "download_url_macos": "",
+            "updater_url_windows": "http://x/updater-win.exe",
+            "updater_url_macos": "http://x/updater-mac",
+        }
+    )
+    assert check_for_update("1.0.0", api) is None
+
+
+def test_no_update_when_updater_url_missing_for_platform(mocker):
+    mocker.patch("core.updater.version_check.platform.system", return_value="Darwin")
+    api = _FakeApiClient(
+        {
+            "version": "1.1.0",
+            "download_url_windows": "http://x/win.zip",
+            "download_url_macos": "http://x/mac.zip",
+            "updater_url_windows": "http://x/updater-win.exe",
+            "updater_url_macos": "",
+        }
+    )
     assert check_for_update("1.0.0", api) is None

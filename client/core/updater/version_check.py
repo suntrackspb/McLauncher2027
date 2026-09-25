@@ -8,13 +8,13 @@ from core.api_client.client import ApiClient
 class UpdateInfo:
     version: str
     download_url: str
+    updater_url: str
 
 
-def _download_url_for_platform(server_response: dict) -> str:
+def _field_for_platform(server_response: dict, macos_key: str, windows_key: str) -> str:
     system = platform.system()
-    if system == "Darwin":
-        return server_response.get("download_url_macos", "")
-    return server_response.get("download_url_windows", "")
+    key = macos_key if system == "Darwin" else windows_key
+    return server_response.get(key, "")
 
 
 def check_for_update(current_version: str, api_client: ApiClient) -> UpdateInfo | None:
@@ -26,8 +26,9 @@ def check_for_update(current_version: str, api_client: ApiClient) -> UpdateInfo 
     if not server_version or server_version == current_version:
         return None
 
-    download_url = _download_url_for_platform(response)
-    if not download_url:
+    download_url = _field_for_platform(response, "download_url_macos", "download_url_windows")
+    updater_url = _field_for_platform(response, "updater_url_macos", "updater_url_windows")
+    if not download_url or not updater_url:
         return None
 
-    return UpdateInfo(version=server_version, download_url=download_url)
+    return UpdateInfo(version=server_version, download_url=download_url, updater_url=updater_url)

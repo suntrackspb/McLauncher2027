@@ -54,38 +54,54 @@ jobs:
       - name: Build launcher
         run: pyinstaller --noconfirm --clean build.spec
 
+      # Апдейтер — отдельный релизный ассет, не кладём его в архив лаунчера
+      # (см. DEV_PLAN.md): лаунчер сам качает свежий app_updater с бэкенда
+      # только когда реально нужно обновиться, и удаляет его после работы.
       - name: Build updater
         run: pyinstaller updater/app_updater.py --name app_updater --onefile --noconfirm
 
       - name: Ad-hoc sign (macOS)
         if: matrix.platform == 'macos'
-        # Без подписи Gatekeeper объявляет скачанный .app «повреждённым» —
+        # Без подписи Gatekeeper объявляет скачанные .app/бинарник «повреждёнными» —
         # платного сертификата разработчика для этого проекта нет.
         run: |
           codesign --force --deep --sign - "dist/${APP_NAME}.app"
           codesign --verify --deep --strict --verbose=2 "dist/${APP_NAME}.app"
+          codesign --force --sign - "dist/app_updater"
 
-      - name: Package (Windows)
+      - name: Package launcher (Windows)
         if: matrix.platform == 'windows'
         working-directory: client/dist
         shell: pwsh
-        # app_updater.exe должен быть СОСЕДОМ папки лаунчера в архиве, а не
-        # внутри неё: при обновлении заменяется вся папка целиком, а Windows
-        # не даст переименовать директорию, пока внутри неё же выполняется
-        # запущенный из неё же app_updater.exe (см. ui_bridge/api.py).
-        run: Compress-Archive -Path "$env:APP_NAME", "app_updater.exe" -DestinationPath "$env:APP_NAME-windows.zip"
+        run: Compress-Archive -Path "$env:APP_NAME" -DestinationPath "$env:APP_NAME-windows.zip"
 
-      - name: Package (macOS)
+      - name: Package launcher (macOS)
         if: matrix.platform == 'macos'
         working-directory: client/dist
-        # app_updater — сосед .app-бандла (не внутри Contents/), по той же
-        # причине, что и на Windows (см. комментарий в шаге для Windows).
-        run: zip -r "$APP_NAME-macos.zip" "$APP_NAME.app" app_updater
+        run: zip -r "$APP_NAME-macos.zip" "$APP_NAME.app"
+
+      - name: Rename updater binary
+        working-directory: client/dist
+        shell: bash
+        # Уникальное имя ассета в релизе + расширение отличает его от zip'а
+        # лаунчера — сервер (launcher_service.py) различает их по .zip vs нет.
+        run: |
+          if [ "${{ matrix.platform }}" = "windows" ]; then
+            mv app_updater.exe app_updater-windows.exe
+          else
+            mv app_updater app_updater-macos
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ env.APP_NAME }}-${{ matrix.platform }}
           path: client/dist/${{ env.APP_NAME }}-${{ matrix.platform }}.zip
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app_updater-${{ matrix.platform }}
+          path: client/dist/app_updater-${{ matrix.platform }}${{ matrix.platform == 'windows' && '.exe' || '' }}
           if-no-files-found: error
 
   release:

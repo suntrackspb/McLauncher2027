@@ -1,15 +1,18 @@
 import platform
+import stat
 import subprocess
 import sys
 import threading
 from dataclasses import asdict, replace
+from pathlib import Path
 
+import requests
 import webview
 
 from core.api_client.client import ApiClient, ApiError
 from core.launch.pipeline import prepare_and_get_launch_command
 from core.settings.store import SettingsStore, get_app_data_dir
-from core.updater.paths import resolve_launcher_path
+from core.updater.paths import cleanup_stale_updater, resolve_launcher_path, updater_binary_path
 from core.updater.version_check import check_for_update
 from ui_bridge.config import AUTHLIB_PATCHED_DIR, APP_FOLDER_NAME, BACKEND_URL, LAUNCHER_VERSION, PROFILE
 from ui_bridge.reporter import WebviewProgressReporter
@@ -32,6 +35,11 @@ class LauncherApi:
         self._api_client = ApiClient(BACKEND_URL)
         self._session: dict | None = None
         self._minecraft_directory = str(get_app_data_dir(APP_FOLDER_NAME) / "minecraft")
+        # Апдейтер удаляет себя не сам (на Windows нельзя удалить файл
+        # собственного работающего .exe) — оставшийся с прошлого обновления
+        # файл подчищаем здесь, при следующем старте лаунчера, когда апдейтер
+        # уже точно закрылся (см. core/updater/paths.py::cleanup_stale_updater).
+        cleanup_stale_updater()
 
     def set_window(self, window) -> None:
         """Вызывается из app.py после создания окна — раньше момента, когда
@@ -59,29 +67,45 @@ class LauncherApi:
             return {"ok": False, "error": str(exc)}
         if info is None:
             return {"ok": True, "update_available": False}
-        return {"ok": True, "update_available": True, "version": info.version, "download_url": info.download_url}
+        return {
+            "ok": True,
+            "update_available": True,
+            "version": info.version,
+            "download_url": info.download_url,
+            "updater_url": info.updater_url,
+        }
 
-    def start_update(self, download_url: str) -> dict:
-        """Запускает отдельный updater-процесс и закрывает лаунчер, чтобы
-        updater мог подменить файлы (см. client/updater/app_updater.py и
-        решение №4 в DEV_PLAN.md)."""
+    def start_update(self, download_url: str, updater_url: str) -> dict:
+        """Качает свежий app_updater с бэкенда (сам он в архив лаунчера не
+        входит — см. DEV_PLAN.md), запускает его и закрывает лаунчер. Апдейтер
+        сам подменяет файлы, перезапускает лаунчер и удаляет себя (см.
+        client/updater/app_updater.py)."""
         if not getattr(sys, "frozen", False):
             return {"ok": False, "error": "Обновление доступно только в собранной версии лаунчера"}
 
         launcher_path = resolve_launcher_path(sys.executable)
-        # app_updater лежит РЯДОМ с папкой/бандлом лаунчера, не внутри — иначе
-        # на Windows подмену заблокирует хендл самого запущенного updater.exe
-        # (см. client/build.spec и .github/workflows/client-build.yml: оба
-        # выкладываются в архив как соседние top-level записи).
-        updater_name = "app_updater.exe" if platform.system() == "Windows" else "app_updater"
-        updater_path = launcher_path.parent / updater_name
-        if not updater_path.exists():
-            return {"ok": False, "error": "Updater не найден рядом с лаунчером"}
+        try:
+            updater_path = self._download_updater(updater_url)
+        except Exception as exc:
+            return {"ok": False, "error": f"Не удалось скачать updater: {exc}"}
 
         subprocess.Popen([str(updater_path), str(launcher_path), download_url])
         if self._window:
             self._window.destroy()
         return {"ok": True}
+
+    @staticmethod
+    def _download_updater(updater_url: str) -> Path:
+        """Скачивает app_updater во временную папку (фиксированный путь — см.
+        updater_binary_path) и на macOS/Linux ставит исполняемый бит (Windows
+        его не требует)."""
+        destination = updater_binary_path()
+        response = requests.get(updater_url, timeout=60)
+        response.raise_for_status()
+        destination.write_bytes(response.content)
+        if platform.system() != "Windows":
+            destination.chmod(destination.stat().st_mode | stat.S_IEXEC)
+        return destination
 
     def browse_java_path(self) -> str | None:
         """Открывает нативный диалог выбора исполняемого файла Java

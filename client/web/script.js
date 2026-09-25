@@ -282,6 +282,7 @@ function enterMainScreen(username) {
 }
 
 let pendingUpdateUrl = null;
+let pendingUpdaterUrl = null;
 
 async function checkForUpdate() {
   const result = await window.pywebview.api.check_for_update();
@@ -289,6 +290,7 @@ async function checkForUpdate() {
     return;
   }
   pendingUpdateUrl = result.download_url;
+  pendingUpdaterUrl = result.updater_url;
   document.getElementById("update-banner-text").textContent = `Доступна версия ${result.version}`;
   document.getElementById("update-banner").hidden = false;
 }
@@ -299,9 +301,9 @@ function initUpdateBanner() {
   });
 
   document.getElementById("btn-update-now").addEventListener("click", async (event) => {
-    if (!pendingUpdateUrl) return;
+    if (!pendingUpdateUrl || !pendingUpdaterUrl) return;
     event.target.disabled = true;
-    const result = await window.pywebview.api.start_update(pendingUpdateUrl);
+    const result = await window.pywebview.api.start_update(pendingUpdateUrl, pendingUpdaterUrl);
     if (!result.ok) {
       event.target.disabled = false;
       setAuthError(result.error);

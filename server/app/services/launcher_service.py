@@ -9,16 +9,32 @@ _CACHE_TTL_SECONDS = 300
 _cache: dict = {"expires_at": 0.0, "value": None}
 
 
-def _pick_asset_url(assets: list[dict], hint: str) -> str:
+def _pick_asset_url(assets: list[dict], hint: str, *, zip_only: bool) -> str:
+    """Апдейтер и архив лаунчера могут делить один и тот же hint в имени
+    ('windows'/'macos'), поэтому дополнительно различаем их по расширению —
+    лаунчер всегда .zip (см. client-build.yml), апдейтер — голый бинарник."""
     for asset in assets:
-        if hint.lower() in asset.get("name", "").lower():
-            return asset.get("browser_download_url", "")
+        name = asset.get("name", "").lower()
+        if hint.lower() not in name:
+            continue
+        if name.endswith(".zip") != zip_only:
+            continue
+        return asset.get("browser_download_url", "")
     return ""
+
+
+_EMPTY_VERSION = LauncherVersionOut(
+    version="",
+    download_url_windows="",
+    download_url_macos="",
+    updater_url_windows="",
+    updater_url_macos="",
+)
 
 
 async def _fetch_latest_release() -> LauncherVersionOut:
     if not settings.launcher_github_repo:
-        return LauncherVersionOut(version="", download_url_windows="", download_url_macos="")
+        return _EMPTY_VERSION
 
     url = f"https://api.github.com/repos/{settings.launcher_github_repo}/releases/latest"
     async with httpx.AsyncClient(timeout=10.0) as http_client:
@@ -29,8 +45,10 @@ async def _fetch_latest_release() -> LauncherVersionOut:
     assets = data.get("assets", [])
     return LauncherVersionOut(
         version=data.get("tag_name", ""),
-        download_url_windows=_pick_asset_url(assets, settings.launcher_asset_windows_hint),
-        download_url_macos=_pick_asset_url(assets, settings.launcher_asset_macos_hint),
+        download_url_windows=_pick_asset_url(assets, settings.launcher_asset_windows_hint, zip_only=True),
+        download_url_macos=_pick_asset_url(assets, settings.launcher_asset_macos_hint, zip_only=True),
+        updater_url_windows=_pick_asset_url(assets, settings.launcher_asset_windows_hint, zip_only=False),
+        updater_url_macos=_pick_asset_url(assets, settings.launcher_asset_macos_hint, zip_only=False),
     )
 
 
@@ -46,7 +64,7 @@ async def get_latest_version() -> LauncherVersionOut:
     try:
         value = await _fetch_latest_release()
     except httpx.HTTPError:
-        return LauncherVersionOut(version="", download_url_windows="", download_url_macos="")
+        return _EMPTY_VERSION
 
     _cache["value"] = value
     _cache["expires_at"] = now + _CACHE_TTL_SECONDS

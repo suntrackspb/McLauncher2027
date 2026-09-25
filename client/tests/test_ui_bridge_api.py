@@ -1,5 +1,3 @@
-import platform
-
 from core.api_client.client import ApiError
 from core.settings.store import LauncherSettings
 from ui_bridge.api import LauncherApi
@@ -114,6 +112,8 @@ def test_check_for_update_reports_available_update(tmp_path, mocker):
             "version": "1.1.0",
             "download_url_windows": "http://x/win.zip",
             "download_url_macos": "http://x/mac.zip",
+            "updater_url_windows": "http://x/updater-win.exe",
+            "updater_url_macos": "http://x/updater-mac",
         },
     )
     mocker.patch("core.updater.version_check.platform.system", return_value="Windows")
@@ -121,6 +121,7 @@ def test_check_for_update_reports_available_update(tmp_path, mocker):
     assert result["ok"] is True
     assert result["update_available"] is True
     assert result["version"] == "1.1.0"
+    assert result["updater_url"] == "http://x/updater-win.exe"
 
 
 def test_check_for_update_wraps_api_error(tmp_path, mocker):
@@ -131,37 +132,45 @@ def test_check_for_update_wraps_api_error(tmp_path, mocker):
 
 def test_start_update_fails_in_dev_mode(tmp_path, mocker):
     api = _api_with_tmp_settings(tmp_path, mocker)
-    result = api.start_update("http://x/win.zip")
+    result = api.start_update("http://x/win.zip", "http://x/updater.exe")
     assert result == {"ok": False, "error": "Обновление доступно только в собранной версии лаунчера"}
 
 
-def test_start_update_fails_when_updater_missing(tmp_path, mocker):
+def test_start_update_fails_when_updater_download_fails(tmp_path, mocker):
     api = _api_with_tmp_settings(tmp_path, mocker)
     mocker.patch("ui_bridge.api.sys.frozen", True, create=True)
     mocker.patch("ui_bridge.api.sys.executable", str(tmp_path / "Launcher" / "Launcher.exe"))
+    mocker.patch("ui_bridge.api.requests.get", side_effect=OSError("boom"))
 
-    result = api.start_update("http://x/win.zip")
+    result = api.start_update("http://x/win.zip", "http://x/updater.exe")
 
-    assert result == {"ok": False, "error": "Updater не найден рядом с лаунчером"}
+    assert result["ok"] is False
+    assert "Не удалось скачать updater" in result["error"]
 
 
-def test_start_update_launches_sibling_updater_and_closes_window(tmp_path, mocker):
+def test_start_update_downloads_updater_and_closes_window(tmp_path, mocker):
     api = _api_with_tmp_settings(tmp_path, mocker)
     install_root = tmp_path / "install"
     launcher_dir = install_root / "Launcher"
     launcher_dir.mkdir(parents=True)
-    updater_name = "app_updater.exe" if platform.system() == "Windows" else "app_updater"
-    (install_root / updater_name).write_bytes(b"stub")
+    updater_path = tmp_path / "downloaded_updater"
 
     mocker.patch("ui_bridge.api.sys.frozen", True, create=True)
     mocker.patch("ui_bridge.api.sys.executable", str(launcher_dir / "Launcher.exe"))
+    mocker.patch("ui_bridge.api.updater_binary_path", return_value=updater_path)
+    response_mock = mocker.Mock(content=b"stub-binary")
+    response_mock.raise_for_status = mocker.Mock()
+    mocker.patch("ui_bridge.api.requests.get", return_value=response_mock)
     popen_mock = mocker.patch("ui_bridge.api.subprocess.Popen")
     api._window = mocker.Mock()
 
-    result = api.start_update("http://x/win.zip")
+    result = api.start_update("http://x/win.zip", "http://x/updater.exe")
 
     assert result == {"ok": True}
+    assert updater_path.read_bytes() == b"stub-binary"
     popen_mock.assert_called_once()
+    args = popen_mock.call_args[0][0]
+    assert args[0] == str(updater_path)
     api._window.destroy.assert_called_once()
 
 
