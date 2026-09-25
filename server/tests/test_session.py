@@ -1,7 +1,9 @@
 SERVER_ID = "a" * 40
+# Не настоящие учётные данные — фикстура для тестов сессии.
+DUMMY_PASSWORD = "not-a-real-secret-2"  # noqa: S105
 
 
-async def _register_and_login(client, username="Steve", password="pass1234"):
+async def _register_and_login(client, username="Steve", password=DUMMY_PASSWORD):
     await client.post("/api/v1/auth/register", json={"username": username, "password": password})
     resp = await client.post("/api/v1/auth/login", json={"username": username, "password": password})
     return resp.json()
