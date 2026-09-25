@@ -7,6 +7,10 @@ from core.launch.options_builder import ServerProfile
 APP_FOLDER_NAME = ".mclauncher2027"
 BACKEND_URL = "http://127.0.0.1:8000"
 
+# Правим при каждом релизе — сверяется с git-тегом, который отдаёт
+# /api/v1/launcher/version (бэкенд берёт его из последнего GitHub Release).
+LAUNCHER_VERSION = "v1.0.0"
+
 PROFILE = ServerProfile(
     mc_version="1.20.1",
     loader="forge",

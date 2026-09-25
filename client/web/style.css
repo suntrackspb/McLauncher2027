@@ -554,6 +554,35 @@ input[type="range"] {
   transform: translateX(16px);
 }
 
+.update-banner {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 18px;
+  border-radius: 0 0 12px 12px;
+  background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: var(--shadow);
+  animation: rise 0.3s ease;
+}
+
+.update-banner-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-small {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
 .overlay {
   position: absolute;
   inset: 0;

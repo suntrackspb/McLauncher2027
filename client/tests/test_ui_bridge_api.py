@@ -93,6 +93,46 @@ def test_get_optional_mods_marks_enabled_flag(tmp_path, mocker):
     assert by_id == {1: False, 2: True}
 
 
+def test_check_for_update_reports_no_update(tmp_path, mocker):
+    api = _api_with_tmp_settings(tmp_path, mocker)
+    mocker.patch.object(
+        api._api_client, "get_launcher_version", return_value={"version": "1.0.0", "download_url_windows": "x"}
+    )
+    result = api.check_for_update()
+    assert result == {"ok": True, "update_available": False}
+
+
+def test_check_for_update_reports_available_update(tmp_path, mocker):
+    api = _api_with_tmp_settings(tmp_path, mocker)
+    mocker.patch("ui_bridge.api.LAUNCHER_VERSION", "1.0.0")
+    mocker.patch.object(
+        api._api_client,
+        "get_launcher_version",
+        return_value={
+            "version": "1.1.0",
+            "download_url_windows": "http://x/win.zip",
+            "download_url_macos": "http://x/mac.zip",
+        },
+    )
+    mocker.patch("core.updater.version_check.platform.system", return_value="Windows")
+    result = api.check_for_update()
+    assert result["ok"] is True
+    assert result["update_available"] is True
+    assert result["version"] == "1.1.0"
+
+
+def test_check_for_update_wraps_api_error(tmp_path, mocker):
+    api = _api_with_tmp_settings(tmp_path, mocker)
+    mocker.patch.object(api._api_client, "get_launcher_version", side_effect=ApiError("Сервер недоступен"))
+    assert api.check_for_update() == {"ok": False, "error": "Сервер недоступен"}
+
+
+def test_start_update_fails_in_dev_mode(tmp_path, mocker):
+    api = _api_with_tmp_settings(tmp_path, mocker)
+    result = api.start_update("http://x/win.zip")
+    assert result == {"ok": False, "error": "Обновление доступно только в собранной версии лаунчера"}
+
+
 def test_get_optional_mods_wraps_api_error(tmp_path, mocker):
     api = _api_with_tmp_settings(tmp_path, mocker)
     mocker.patch.object(api._api_client, "get_optional_mods", side_effect=ApiError("Сервер недоступен"))

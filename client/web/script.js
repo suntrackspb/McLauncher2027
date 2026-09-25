@@ -281,8 +281,38 @@ function enterMainScreen(username) {
   showScreen("screen-main");
 }
 
+let pendingUpdateUrl = null;
+
+async function checkForUpdate() {
+  const result = await window.pywebview.api.check_for_update();
+  if (!result.ok || !result.update_available) {
+    return;
+  }
+  pendingUpdateUrl = result.download_url;
+  document.getElementById("update-banner-text").textContent = `Доступна версия ${result.version}`;
+  document.getElementById("update-banner").hidden = false;
+}
+
+function initUpdateBanner() {
+  document.getElementById("btn-update-later").addEventListener("click", () => {
+    document.getElementById("update-banner").hidden = true;
+  });
+
+  document.getElementById("btn-update-now").addEventListener("click", async (event) => {
+    if (!pendingUpdateUrl) return;
+    event.target.disabled = true;
+    const result = await window.pywebview.api.start_update(pendingUpdateUrl);
+    if (!result.ok) {
+      event.target.disabled = false;
+      setAuthError(result.error);
+    }
+  });
+}
+
 async function bootstrap() {
   initEventHandlers();
+  initUpdateBanner();
+  checkForUpdate();
 
   const session = await window.pywebview.api.get_session();
   if (session) {

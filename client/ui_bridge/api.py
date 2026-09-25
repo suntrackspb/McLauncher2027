@@ -1,13 +1,16 @@
 import subprocess
+import sys
 import threading
 from dataclasses import asdict, replace
+from pathlib import Path
 
 import webview
 
 from core.api_client.client import ApiClient, ApiError
 from core.launch.pipeline import prepare_and_get_launch_command
 from core.settings.store import SettingsStore, get_app_data_dir
-from ui_bridge.config import AUTHLIB_PATCHED_DIR, APP_FOLDER_NAME, BACKEND_URL, PROFILE
+from core.updater.version_check import check_for_update
+from ui_bridge.config import AUTHLIB_PATCHED_DIR, APP_FOLDER_NAME, BACKEND_URL, LAUNCHER_VERSION, PROFILE
 from ui_bridge.reporter import WebviewProgressReporter
 
 
@@ -45,6 +48,36 @@ class LauncherApi:
         updated = replace(current, **{k: v for k, v in data.items() if k in known_fields})
         self._settings_store.save(updated)
         return asdict(updated)
+
+    # --- обновление лаунчера ----------------------------------------------
+
+    def check_for_update(self) -> dict:
+        try:
+            info = check_for_update(LAUNCHER_VERSION, self._api_client)
+        except ApiError as exc:
+            return {"ok": False, "error": str(exc)}
+        if info is None:
+            return {"ok": True, "update_available": False}
+        return {"ok": True, "update_available": True, "version": info.version, "download_url": info.download_url}
+
+    def start_update(self, download_url: str) -> dict:
+        """Запускает отдельный updater-процесс и закрывает лаунчер, чтобы
+        updater мог подменить файлы (см. client/updater/app_updater.py и
+        решение №4 в DEV_PLAN.md)."""
+        if not getattr(sys, "frozen", False):
+            return {"ok": False, "error": "Обновление доступно только в собранной версии лаунчера"}
+
+        launcher_path = Path(sys.executable)
+        updater_path = launcher_path.parent / (
+            "app_updater.exe" if launcher_path.suffix == ".exe" else "app_updater"
+        )
+        if not updater_path.exists():
+            return {"ok": False, "error": "Updater не найден рядом с лаунчером"}
+
+        subprocess.Popen([str(updater_path), str(launcher_path), download_url])
+        if self._window:
+            self._window.destroy()
+        return {"ok": True}
 
     def browse_java_path(self) -> str | None:
         """Открывает нативный диалог выбора исполняемого файла Java

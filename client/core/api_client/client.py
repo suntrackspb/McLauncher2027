@@ -33,6 +33,18 @@ class ApiClient:
     def get_optional_mods(self, loader: str, mc_version: str) -> list[dict]:
         return self._get("/api/v1/mods/optional", {"loader": loader, "mc_version": mc_version})
 
+    def get_launcher_version(self) -> dict:
+        return self._get_dict("/api/v1/launcher/version")
+
+    def _get_dict(self, path: str) -> dict:
+        try:
+            resp = self._session.get(f"{self.base_url}{path}", timeout=self.timeout)
+        except requests.RequestException as exc:
+            raise ApiError(f"Не удалось связаться с сервером: {exc}") from exc
+        if resp.status_code != 200:
+            raise ApiError(self._extract_message(resp), status_code=resp.status_code)
+        return resp.json()
+
     def _post(self, path: str, json_body: dict, expected: int) -> dict:
         try:
             resp = self._session.post(f"{self.base_url}{path}", json=json_body, timeout=self.timeout)
