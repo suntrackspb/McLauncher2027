@@ -22,6 +22,8 @@ def prepare_and_get_launch_command(
     settings: LauncherSettings,
     authlib_patched_jars_dir: str,
     api_client: ApiClient,
+    launcher_name: str,
+    launcher_version: str,
     reporter: ProgressReporter | None = None,
 ) -> list[str]:
     """Полный пайплайн одного запуска: установить лоадер -> синхронизировать
@@ -52,6 +54,8 @@ def prepare_and_get_launch_command(
         settings=settings,
         profile=profile,
         minecraft_directory=minecraft_directory,
+        launcher_name=launcher_name,
+        launcher_version=launcher_version,
     )
     command = mll.command.get_minecraft_command(version_id, minecraft_directory, options)
     command.extend(build_extra_game_arguments(settings))

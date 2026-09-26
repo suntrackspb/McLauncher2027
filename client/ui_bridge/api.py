@@ -14,7 +14,16 @@ from core.launch.pipeline import prepare_and_get_launch_command
 from core.settings.store import SettingsStore, get_app_data_dir
 from core.updater.paths import cleanup_stale_updater, resolve_launcher_path, updater_binary_path
 from core.updater.version_check import check_for_update
-from ui_bridge.config import AUTHLIB_PATCHED_DIR, APP_FOLDER_NAME, BACKEND_URL, LAUNCHER_VERSION, PROFILE
+from ui_bridge.config import (
+    API_TIMEOUT_SECONDS,
+    APP_FOLDER_NAME,
+    APP_NAME,
+    AUTHLIB_PATCHED_DIR,
+    BACKEND_URL,
+    DOWNLOAD_TIMEOUT_SECONDS,
+    LAUNCHER_VERSION,
+    PROFILE,
+)
 from ui_bridge.reporter import WebviewProgressReporter
 
 
@@ -32,7 +41,7 @@ class LauncherApi:
     def __init__(self) -> None:
         self._window = None
         self._settings_store = SettingsStore(APP_FOLDER_NAME)
-        self._api_client = ApiClient(BACKEND_URL)
+        self._api_client = ApiClient(BACKEND_URL, timeout=API_TIMEOUT_SECONDS)
         self._session: dict | None = None
         self._minecraft_directory = str(get_app_data_dir(APP_FOLDER_NAME) / "minecraft")
         # Апдейтер удаляет себя не сам (на Windows нельзя удалить файл
@@ -100,7 +109,7 @@ class LauncherApi:
         updater_binary_path) и на macOS/Linux ставит исполняемый бит (Windows
         его не требует)."""
         destination = updater_binary_path()
-        response = requests.get(updater_url, timeout=60)
+        response = requests.get(updater_url, timeout=DOWNLOAD_TIMEOUT_SECONDS)
         response.raise_for_status()
         destination.write_bytes(response.content)
         if platform.system() != "Windows":
@@ -186,6 +195,8 @@ class LauncherApi:
                 settings=settings,
                 authlib_patched_jars_dir=AUTHLIB_PATCHED_DIR,
                 api_client=self._api_client,
+                launcher_name=APP_NAME,
+                launcher_version=LAUNCHER_VERSION,
                 reporter=reporter,
             )
         except Exception as exc:  # noqa: BLE001 — репортим в UI любую причину провала

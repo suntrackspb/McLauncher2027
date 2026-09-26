@@ -11,8 +11,7 @@ import sys
 
 from PyInstaller.utils.hooks import collect_all, copy_metadata
 
-APP_NAME = "McLauncher2027"
-BUNDLE_ID = "ru.spbwar.mclauncher2027"
+from ui_bridge.config import APP_NAME, BUNDLE_ID
 
 datas = [("web", "web"), ("assets", "assets")]
 binaries = []
@@ -102,7 +101,7 @@ if sys.platform == "darwin":
         bundle_identifier=BUNDLE_ID,
         info_plist={
             "CFBundleName": APP_NAME,
-            "CFBundleDisplayName": "McLauncher2027",
+            "CFBundleDisplayName": APP_NAME,
             "NSHighResolutionCapable": True,
             "LSMinimumSystemVersion": "11.0",
             "LSApplicationCategoryType": "public.app-category.games",

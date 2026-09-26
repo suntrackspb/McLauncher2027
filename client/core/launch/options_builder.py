@@ -46,14 +46,16 @@ def build_launch_options(
     settings: LauncherSettings,
     profile: ServerProfile,
     minecraft_directory: str,
+    launcher_name: str,
+    launcher_version: str,
 ) -> dict:
     options: dict = {
         "username": username,
         "uuid": uuid,
         "token": access_token,
         "jvmArguments": build_jvm_arguments(settings.ram_mb, settings.jvm_arguments_extra),
-        "launcherName": "McLauncher2027",
-        "launcherVersion": "1.0.0",
+        "launcherName": launcher_name,
+        "launcherVersion": launcher_version,
         "gameDirectory": minecraft_directory,
         "customResolution": True,
         "resolutionWidth": str(settings.resolution_width),

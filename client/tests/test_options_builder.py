@@ -35,6 +35,8 @@ def test_build_launch_options_maps_all_fields():
         settings=settings,
         profile=profile,
         minecraft_directory="/tmp/mc",
+        launcher_name="McLauncher2027",
+        launcher_version="v1.0.0",
     )
 
     assert options["username"] == "Steve"
@@ -46,6 +48,8 @@ def test_build_launch_options_maps_all_fields():
     assert options["resolutionHeight"] == "1080"
     assert options["customResolution"] is True
     assert options["gameDirectory"] == "/tmp/mc"
+    assert options["launcherName"] == "McLauncher2027"
+    assert options["launcherVersion"] == "v1.0.0"
     assert "-Xmx4096M" in options["jvmArguments"]
 
 
@@ -73,6 +77,8 @@ def test_build_launch_options_sets_executable_path_when_java_path_given():
         settings=settings,
         profile=profile,
         minecraft_directory="/tmp/mc",
+        launcher_name="McLauncher2027",
+        launcher_version="v1.0.0",
     )
 
     assert options["executablePath"] == "/usr/bin/java"
@@ -95,6 +101,8 @@ def test_build_launch_options_omits_executable_path_by_default():
         settings=settings,
         profile=profile,
         minecraft_directory="/tmp/mc",
+        launcher_name="McLauncher2027",
+        launcher_version="v1.0.0",
     )
 
     assert "executablePath" not in options

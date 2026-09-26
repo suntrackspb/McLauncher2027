@@ -53,6 +53,8 @@ def test_pipeline_runs_all_steps_in_order(mocker, tmp_path):
         settings=LauncherSettings(),
         authlib_patched_jars_dir=str(tmp_path / "patched"),
         api_client=fake_api,
+        launcher_name="McLauncher2027",
+        launcher_version="v1.0.0",
     )
 
     assert events == ["install", "sync_mods", "patch_authlib", "build_command"]
@@ -91,6 +93,8 @@ def test_pipeline_passes_reporter_through_install(mocker, tmp_path):
         settings=LauncherSettings(),
         authlib_patched_jars_dir=str(tmp_path / "patched"),
         api_client=fake_api,
+        launcher_name="McLauncher2027",
+        launcher_version="v1.0.0",
         reporter=reporter,
     )
 
