@@ -10,8 +10,8 @@ from core.launch.options_builder import ServerProfile
 # Один хардкод-профиль на билд лаунчера (решение из DEV_PLAN.md) — без
 # мультипрофильного UI/бэка.
 
-APP_NAME = "McLauncher2027"
-APP_FOLDER_NAME = ".mclauncher2027"
+APP_NAME = "McNYWeekend2027"
+APP_FOLDER_NAME = ".mcweekend2027"
 # Обратный домен для macOS-бандла (build.spec) — идентификатор приложения,
 # как ID пакета на других платформах.
 BUNDLE_ID = "ru.spbwar.mclauncher2027"
