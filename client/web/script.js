@@ -270,6 +270,21 @@ function initEventHandlers() {
     // При успехе кнопку разблокируем по завершении/ошибке —
     // финальный статус придёт через onLauncherStatus из фонового потока.
   });
+
+  document.getElementById("btn-reinstall").addEventListener("click", async () => {
+    if (!confirm("Удалить и заново установить папку игры? Все локальные изменения в ней будут потеряны.")) {
+      return;
+    }
+    setPlayButtonBusy(true);
+    setProgress(0);
+    setStatus("Переустановка…");
+    const result = await window.pywebview.api.reinstall();
+    if (!result.ok) {
+      setStatus(`Ошибка: ${result.error}`);
+      setPlayButtonBusy(false);
+    }
+    // Как и play() — финальный статус придёт через onLauncherStatus.
+  });
 }
 
 function enterMainScreen(username) {

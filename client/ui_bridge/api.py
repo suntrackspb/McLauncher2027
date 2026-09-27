@@ -10,7 +10,9 @@ import requests
 import webview
 
 from core.api_client.client import ApiClient, ApiError
+from core.launch.options_builder import ServerProfile
 from core.launch.pipeline import prepare_and_get_launch_command
+from core.launch.profile_store import save_installed_profile, sync_install_dir
 from core.settings.store import SettingsStore, get_app_data_dir
 from core.updater.paths import cleanup_stale_updater, resolve_launcher_path, updater_binary_path
 from core.updater.version_check import check_for_update
@@ -22,7 +24,6 @@ from ui_bridge.config import (
     BACKEND_URL,
     DOWNLOAD_TIMEOUT_SECONDS,
     LAUNCHER_VERSION,
-    PROFILE,
 )
 from ui_bridge.reporter import WebviewProgressReporter
 
@@ -40,10 +41,12 @@ class LauncherApi:
 
     def __init__(self) -> None:
         self._window = None
+        self._app_data_dir = get_app_data_dir(APP_FOLDER_NAME)
         self._settings_store = SettingsStore(APP_FOLDER_NAME)
         self._api_client = ApiClient(BACKEND_URL, timeout=API_TIMEOUT_SECONDS)
         self._session: dict | None = None
-        self._minecraft_directory = str(get_app_data_dir(APP_FOLDER_NAME) / "minecraft")
+        self._minecraft_directory = str(self._app_data_dir / "minecraft")
+        self._force_reinstall = False
         # Апдейтер удаляет себя не сам (на Windows нельзя удалить файл
         # собственного работающего .exe) — оставшийся с прошлого обновления
         # файл подчищаем здесь, при следующем старте лаунчера, когда апдейтер
@@ -157,7 +160,10 @@ class LauncherApi:
 
     def get_optional_mods(self) -> dict:
         try:
-            mods = self._api_client.get_optional_mods(PROFILE.loader, PROFILE.mc_version)
+            profile_data = self._api_client.get_profile()
+            mods = self._api_client.get_optional_mods(
+                profile_data["loader"], profile_data["mc_version"]
+            )
         except ApiError as exc:
             return {"ok": False, "error": str(exc)}
 
@@ -182,13 +188,44 @@ class LauncherApi:
         threading.Thread(target=self._play_thread, daemon=True).start()
         return {"ok": True}
 
+    def reinstall(self) -> dict:
+        """Принудительный снос и переустановка minecraft-директории (кнопка
+        "Переустановить" в UI) — на случай битой установки, независимо от
+        того, совпадает ли локально стоящий профиль с профилем сервера."""
+        if not self._session:
+            return {"ok": False, "error": "Сначала войдите в аккаунт"}
+        self._force_reinstall = True
+        threading.Thread(target=self._play_thread, daemon=True).start()
+        return {"ok": True}
+
     def _play_thread(self) -> None:
         reporter = WebviewProgressReporter(self._window) if self._window else None
         settings = self._settings_store.load()
+        force_reinstall, self._force_reinstall = self._force_reinstall, False
         try:
+            if reporter:
+                reporter.status("Проверка профиля сервера")
+            profile_data = self._api_client.get_profile()
+            profile = ServerProfile(
+                mc_version=profile_data["mc_version"],
+                loader=profile_data["loader"],
+                loader_version=profile_data.get("loader_version"),
+                server_address=profile_data["server_address"],
+                server_port=profile_data["server_port"],
+            )
+
+            wiped = sync_install_dir(
+                Path(self._minecraft_directory),
+                self._app_data_dir,
+                profile,
+                force=force_reinstall,
+            )
+            if wiped and reporter:
+                reporter.status("Профиль сборки изменился — переустановка")
+
             command = prepare_and_get_launch_command(
                 minecraft_directory=self._minecraft_directory,
-                profile=PROFILE,
+                profile=profile,
                 username=self._session["username"],
                 uuid=self._session["uuid"],
                 access_token=self._session["access_token"],
@@ -199,6 +236,7 @@ class LauncherApi:
                 launcher_version=LAUNCHER_VERSION,
                 reporter=reporter,
             )
+            save_installed_profile(self._app_data_dir, profile)
         except Exception as exc:  # noqa: BLE001 — репортим в UI любую причину провала
             if reporter:
                 reporter.status(f"Ошибка: {exc}")

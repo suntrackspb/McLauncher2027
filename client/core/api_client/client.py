@@ -36,6 +36,9 @@ class ApiClient:
     def get_launcher_version(self) -> dict:
         return self._get_dict("/api/v1/launcher/version")
 
+    def get_profile(self) -> dict:
+        return self._get_dict("/api/v1/launcher/profile")
+
     def _get_dict(self, path: str) -> dict:
         try:
             resp = self._session.get(f"{self.base_url}{path}", timeout=self.timeout)
