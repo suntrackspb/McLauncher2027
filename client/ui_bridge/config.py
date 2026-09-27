@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from ui_bridge._version import LAUNCHER_VERSION
 
 # Единственное место, где собраны все значения, которые правятся перед
@@ -11,7 +9,9 @@ from ui_bridge._version import LAUNCHER_VERSION
 # получает его с бэкенда через GET /api/v1/launcher/profile и сравнивает с
 # локальным маркером установки (см. core/launch/profile_store.py), сам
 # переустанавливаясь при изменении. Меняется через админ-панель на сервере,
-# без пересборки лаунчера.
+# без пересборки лаунчера. Пропатченные authlib-jar'ы по той же причине тоже
+# не зашиты в сборку — качаются с бэкенда и кэшируются локально (см.
+# core/launch/authlib_patch.py, GET /api/v1/launcher/authlib-jars).
 
 APP_NAME = "McNYWeekend2027"
 APP_FOLDER_NAME = ".mcweekend2027"
@@ -31,6 +31,3 @@ WINDOW_HEIGHT = 650
 
 API_TIMEOUT_SECONDS = 10.0
 DOWNLOAD_TIMEOUT_SECONDS = 60
-
-CLIENT_ROOT = Path(__file__).resolve().parent.parent
-AUTHLIB_PATCHED_DIR = str(CLIENT_ROOT / "assets" / "authlib_patched")

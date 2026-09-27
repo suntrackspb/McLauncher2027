@@ -21,7 +21,7 @@ def prepare_and_get_launch_command(
     uuid: str,
     access_token: str,
     settings: LauncherSettings,
-    authlib_patched_jars_dir: str,
+    authlib_cache_dir: str,
     api_client: ApiClient,
     launcher_name: str,
     launcher_version: str,
@@ -69,8 +69,8 @@ def prepare_and_get_launch_command(
 
     if reporter:
         reporter.status("Настройка авторизации")
-    patch_authlib_jars(minecraft_directory, authlib_patched_jars_dir)
-    log("authlib пропатчен")
+    patched = patch_authlib_jars(minecraft_directory, api_client, authlib_cache_dir)
+    log(f"authlib пропатчен: {[str(p) for p in patched]}")
 
     options = build_launch_options(
         username=username,

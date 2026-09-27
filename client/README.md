@@ -79,10 +79,12 @@ python -m pytest -q
 
 - `find_authlib_jars(minecraft_directory)` — какие версии authlib реально
   установлены после `loaders.install(...)`.
-- `patch_authlib_jars(minecraft_directory, patched_jars_dir)` — подменяет
-  найденные файлы на `authlib-<версия>_skinfix.jar` из `patched_jars_dir`
-  (заготовки кладём в `client/assets/authlib_patched/`, готовятся один раз при
-  подготовке сборки под конкретный бэкенд — см. ops-чеклист в `../DEV_PLAN.md`).
+- `patch_authlib_jars(minecraft_directory, api_client, cache_dir)` — подменяет
+  найденные файлы на `authlib-<версия>_skinfix.jar`, скачанный с бэкенда
+  (`GET /api/v1/launcher/authlib-jars`) и закэшированный в `cache_dir`.
+  Заготовки не зашиты в сборку — кладутся руками в `server/storage/authlib/`
+  при подготовке бэкенда под конкретный сервер (см. ops-чеклист в
+  `../DEV_PLAN.md`), обновляются независимо от релизов лаунчера.
 
 Серверная сторона (замена authlib внутри `minecraft_server.jar`/Forge) —
 ручная операция на самом игровом сервере, вне этого репозитория.

@@ -26,6 +26,10 @@ _mods_dir = Path(settings.mods_storage_dir)
 _mods_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/mod-files", StaticFiles(directory=_mods_dir), name="mod-files")
 
+_authlib_dir = Path(settings.authlib_storage_dir)
+_authlib_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/authlib-files", StaticFiles(directory=_authlib_dir), name="authlib-files")
+
 _admin_ui_dir = Path(__file__).resolve().parent / "static" / "admin"
 app.mount("/admin", StaticFiles(directory=_admin_ui_dir, html=True), name="admin-ui")
 

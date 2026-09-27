@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     public_base_url: str = ""
     textures_storage_dir: str = "./storage/textures"
     mods_storage_dir: str = "./storage/mods"
+    # Пропатченные authlib-jar'ы (см. DEV_PLAN.md, ops-чеклист) — кладутся сюда
+    # руками при подготовке новой версии, а не через код/админку: сама подмена
+    # редкая и требует ручного патча байткода, автоматизировать нечего.
+    authlib_storage_dir: str = "./storage/authlib"
 
     # Пароль администратора для /api/v1/admin/login. Если не задан явно —
     # генерируется случайно при первом запуске и сохраняется в
