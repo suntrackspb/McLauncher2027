@@ -41,10 +41,10 @@ if sys.platform == "win32":
         "webview.platforms.edgechromium",
         "webview.platforms.winforms",
     ]
-    icon = None
+    icon = "assets/icon.ico"
 elif sys.platform == "darwin":
     hiddenimports += ["webview.platforms.cocoa"]
-    icon = None
+    icon = "assets/icon.icns"
 else:
     hiddenimports += ["webview.platforms.gtk"]
     icon = None
