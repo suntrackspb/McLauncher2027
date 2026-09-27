@@ -10,6 +10,7 @@ import requests
 import webview
 
 from core.api_client.client import ApiClient, ApiError
+from core.debug_log import DebugLogger, debug_log_path, is_debug_flag_set
 from core.launch.options_builder import ServerProfile
 from core.launch.pipeline import prepare_and_get_launch_command
 from core.launch.profile_store import save_installed_profile, sync_install_dir
@@ -205,6 +206,9 @@ class LauncherApi:
         reporter = WebviewProgressReporter(self._window) if self._window else None
         settings = self._settings_store.load()
         force_reinstall, self._force_reinstall = self._force_reinstall, False
+        debug_logger = DebugLogger(enabled=settings.debug or is_debug_flag_set())
+        debug_logger.log(f"=== Запуск игры (force_reinstall={force_reinstall}) ===")
+        debug_logger.log(f"launcher_version={LAUNCHER_VERSION}, backend={self._api_client.base_url}")
         try:
             if reporter:
                 reporter.status("Проверка профиля сервера")
@@ -223,6 +227,7 @@ class LauncherApi:
                 profile,
                 force=force_reinstall,
             )
+            debug_logger.log(f"Переустановка директории игры: {wiped}")
             if wiped and reporter:
                 reporter.status("Профиль сборки изменился — переустановка")
 
@@ -238,13 +243,16 @@ class LauncherApi:
                 launcher_name=APP_NAME,
                 launcher_version=LAUNCHER_VERSION,
                 reporter=reporter,
+                debug_logger=debug_logger,
             )
             save_installed_profile(self._app_data_dir, profile)
         except Exception as exc:  # noqa: BLE001 — репортим в UI любую причину провала
+            debug_logger.log(f"ОШИБКА: {exc!r}")
             if reporter:
                 reporter.status(f"Ошибка: {exc}")
             return
 
+        debug_logger.log("Запуск процесса игры…")
         if reporter:
             reporter.status("Запуск игры")
         subprocess.Popen(command, cwd=self._minecraft_directory)

@@ -34,6 +34,9 @@ class LauncherSettings:
     # ID опциональных модов (из /mods/optional), которые игрок себе включил —
     # хранится только локально, на сервер не синкается (решение из DEV_PLAN.md).
     enabled_optional_mod_ids: list[int] = field(default_factory=list)
+    # Подробный лог запуска (см. core/debug_log.py) — по умолчанию выключен,
+    # чтобы не плодить файлы на диске игрока без необходимости.
+    debug: bool = False
 
 
 class SettingsStore:

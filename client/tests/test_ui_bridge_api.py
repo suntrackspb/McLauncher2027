@@ -20,6 +20,7 @@ def test_get_settings_returns_defaults(tmp_path, mocker):
         "jvm_arguments_extra": "",
         "game_arguments_extra": "",
         "enabled_optional_mod_ids": [],
+        "debug": False,
     }
 
 
