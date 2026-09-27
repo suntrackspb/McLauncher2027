@@ -7,9 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import admin_auth
 from app.core.database import get_db
 from app.models.mod import ModType
-from app.schemas.admin import AdminLoginRequest, AdminLoginResponse
+from app.schemas.admin import AdminLoginRequest, AdminLoginResponse, ServerProfileUpdate
+from app.schemas.launcher import ServerProfileOut
 from app.schemas.mod import ModOut
-from app.services import mod_service
+from app.services import mod_service, profile_service
 from app.services.errors import ServiceError
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -66,3 +67,23 @@ async def delete_mod(mod_id: int, db: AsyncSession = Depends(get_db)):
         await mod_service.delete_mod(db, mod_id)
     except ServiceError as exc:
         raise HTTPException(status_code=404, detail=exc.message) from exc
+
+
+@router.get("/profile", response_model=ServerProfileOut, dependencies=[Depends(require_admin)])
+async def get_profile(db: AsyncSession = Depends(get_db)):
+    try:
+        return await profile_service.get_profile(db)
+    except ServiceError as exc:
+        raise HTTPException(status_code=404, detail=exc.message) from exc
+
+
+@router.put("/profile", response_model=ServerProfileOut, dependencies=[Depends(require_admin)])
+async def update_profile(payload: ServerProfileUpdate, db: AsyncSession = Depends(get_db)):
+    return await profile_service.update_profile(
+        db,
+        mc_version=payload.mc_version,
+        loader=payload.loader,
+        loader_version=payload.loader_version,
+        server_address=payload.server_address,
+        server_port=payload.server_port,
+    )
