@@ -78,6 +78,11 @@ def test_get_optional_mods_marks_enabled_flag(tmp_path, mocker):
 
     mocker.patch.object(
         api._api_client,
+        "get_profile",
+        return_value={"mc_version": "1.20.1", "loader": "forge"},
+    )
+    mocker.patch.object(
+        api._api_client,
         "get_optional_mods",
         return_value=[
             {"id": 1, "name": "A"},
@@ -175,6 +180,11 @@ def test_start_update_downloads_updater_and_closes_window(tmp_path, mocker):
 
 def test_get_optional_mods_wraps_api_error(tmp_path, mocker):
     api = _api_with_tmp_settings(tmp_path, mocker)
+    mocker.patch.object(
+        api._api_client,
+        "get_profile",
+        return_value={"mc_version": "1.20.1", "loader": "forge"},
+    )
     mocker.patch.object(api._api_client, "get_optional_mods", side_effect=ApiError("Сервер недоступен"))
 
     result = api.get_optional_mods()
