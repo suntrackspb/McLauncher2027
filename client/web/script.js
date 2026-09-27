@@ -153,6 +153,7 @@ async function loadSettingsIntoPanel() {
   document.getElementById("input-java-path").value = settings.java_path;
   document.getElementById("input-jvm-args").value = settings.jvm_arguments_extra;
   document.getElementById("input-game-args").value = settings.game_arguments_extra;
+  document.getElementById("input-debug").checked = Boolean(settings.debug);
 }
 
 async function saveSettingsFromPanel() {
@@ -164,6 +165,7 @@ async function saveSettingsFromPanel() {
     java_path: document.getElementById("input-java-path").value.trim(),
     jvm_arguments_extra: document.getElementById("input-jvm-args").value.trim(),
     game_arguments_extra: document.getElementById("input-game-args").value.trim(),
+    debug: document.getElementById("input-debug").checked,
   };
   await window.pywebview.api.save_settings(payload);
   closeAllPanels();
