@@ -119,7 +119,13 @@ jobs:
         if: matrix.platform == 'windows'
         working-directory: client/dist
         shell: pwsh
-        run: Compress-Archive -Path "$env:APP_NAME" -DestinationPath "$env:APP_NAME-windows.zip"
+        # Nuitka --standalone всегда добавляет суффикс .dist к папке (в отличие
+        # от --macos-create-app-bundle, где .app это и есть весь суффикс) —
+        # даже когда --output-folder-name задан явно. Переименовываем перед
+        # архивацией, чтобы распакованная папка не торчала как "X.dist".
+        run: |
+          Rename-Item -Path "$env:APP_NAME.dist" -NewName "$env:APP_NAME"
+          Compress-Archive -Path "$env:APP_NAME" -DestinationPath "$env:APP_NAME-windows.zip"
 
       - name: Package launcher (macOS)
         if: matrix.platform == 'macos'
