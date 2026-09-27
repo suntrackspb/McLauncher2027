@@ -72,6 +72,9 @@ class LauncherApi:
 
     # --- обновление лаунчера ----------------------------------------------
 
+    def get_launcher_version(self) -> str:
+        return LAUNCHER_VERSION
+
     def check_for_update(self) -> dict:
         try:
             info = check_for_update(LAUNCHER_VERSION, self._api_client)

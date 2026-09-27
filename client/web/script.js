@@ -287,13 +287,16 @@ function initEventHandlers() {
   });
 }
 
-function enterMainScreen(username) {
+async function enterMainScreen(username) {
   document.getElementById("current-username").textContent = username;
   setStatus("Готово к запуску");
   setProgress(0);
   document.getElementById("progress-fill").style.width = "0%";
   setPlayButtonBusy(false);
   showScreen("screen-main");
+
+  const version = await window.pywebview.api.get_launcher_version();
+  document.getElementById("launcher-version").textContent = version;
 }
 
 let pendingUpdateUrl = null;

@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from ui_bridge._version import LAUNCHER_VERSION
+
 # Единственное место, где собраны все значения, которые правятся перед
 # пересборкой/релизом (версия, адреса, тайминги) — раньше были раскиданы по
 # core/ и ui_bridge/api.py, из-за чего было легко поправить что-то в одном
@@ -19,9 +21,10 @@ BUNDLE_ID = "ru.spbwar.mclauncher2027"
 
 BACKEND_URL = "http://127.0.0.1:8000"
 
-# Правим при каждом релизе — сверяется с git-тегом, который отдаёт
-# /api/v1/launcher/version (бэкенд берёт его из последнего GitHub Release).
-LAUNCHER_VERSION = "v1.0.0"
+# LAUNCHER_VERSION больше не хардкодится тут — CI сама прописывает его в
+# ui_bridge/_version.py из git-тега перед сборкой релиза (см. workflow),
+# чтобы сверка с /api/v1/launcher/version (бэкенд берёт версию из последнего
+# GitHub Release) не зависела от того, не забыли ли обновить константу руками.
 
 WINDOW_WIDTH = 1000
 WINDOW_HEIGHT = 650
