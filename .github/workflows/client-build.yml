@@ -20,9 +20,6 @@ concurrency:
 permissions:
   contents: read
 
-env:
-  APP_NAME: McLauncher2027
-
 jobs:
   build:
     strategy:
@@ -48,17 +45,66 @@ jobs:
 
       - run: python -m pytest -q
 
-      # onedir (не onefile) + collect_all("webview") в build.spec: pywebview
-      # везёт свои платформенные бэкенды и JS-файлы динамически, без спеки
-      # PyInstaller их не видит и сборка падает пустым окном на чистой машине.
-      - name: Build launcher
-        run: pyinstaller --noconfirm --clean build.spec
+      # Единственное место, где берём APP_NAME/BUNDLE_ID — из ui_bridge/config.py,
+      # а не дублируем их строкой здесь (см. историю рассинхрона в git log
+      # ui_bridge/config.py).
+      - name: Read app metadata
+        shell: bash
+        run: python -c "from ui_bridge.config import APP_NAME, BUNDLE_ID; print(f'APP_NAME={APP_NAME}'); print(f'BUNDLE_ID={BUNDLE_ID}')" >> "$GITHUB_ENV"
+
+      # onedir/standalone (не onefile) — надёжнее для pywebview, см. build.spec
+      # раньше / комментарий в app.py. pywebview грузит платформенные бэкенды
+      # динамически, поэтому их нужно явно включать через --include-module.
+      - name: Build launcher (Windows)
+        if: matrix.platform == 'windows'
+        run: >
+          python -m nuitka
+          --standalone
+          --assume-yes-for-downloads
+          --output-dir=dist
+          --output-filename=${{ env.APP_NAME }}
+          --output-folder-name=${{ env.APP_NAME }}
+          --include-data-dir=web=web
+          --include-data-dir=assets=assets
+          --include-package-data=webview
+          --include-module=webview.platforms.edgechromium
+          --include-module=webview.platforms.winforms
+          --include-package=clr_loader
+          --include-package=pythonnet
+          --windows-console-mode=disable
+          --windows-icon-from-ico=assets/icon.ico
+          app.py
+
+      - name: Build launcher (macOS)
+        if: matrix.platform == 'macos'
+        run: >
+          python -m nuitka
+          --standalone
+          --assume-yes-for-downloads
+          --output-dir=dist
+          --output-folder-name=${{ env.APP_NAME }}
+          --include-data-dir=web=web
+          --include-data-dir=assets=assets
+          --include-package-data=webview
+          --include-module=webview.platforms.cocoa
+          --macos-create-app-bundle
+          --macos-app-name=${{ env.APP_NAME }}
+          --macos-signed-app-name=${{ env.BUNDLE_ID }}
+          --macos-app-category-type=public.app-category.games
+          --macos-app-icon=assets/icon.icns
+          app.py
 
       # Апдейтер — отдельный релизный ассет, не кладём его в архив лаунчера
       # (см. DEV_PLAN.md): лаунчер сам качает свежий app_updater с бэкенда
       # только когда реально нужно обновиться, и удаляет его после работы.
       - name: Build updater
-        run: pyinstaller updater/app_updater.py --name app_updater --onefile --noconfirm
+        run: >
+          python -m nuitka
+          --onefile
+          --assume-yes-for-downloads
+          --output-dir=dist
+          --output-filename=app_updater
+          updater/app_updater.py
 
       - name: Ad-hoc sign (macOS)
         if: matrix.platform == 'macos'

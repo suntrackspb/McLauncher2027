@@ -22,9 +22,9 @@ def cleanup_stale_updater() -> None:
 
 
 def resolve_launcher_path(executable_path: str) -> Path:
-    """`sys.executable` внутри собранного PyInstaller-приложения (onedir,
-    см. `build.spec`) указывает на бинарник, а не на то, что реально нужно
-    подменять при обновлении:
+    """`sys.executable` внутри собранного Nuitka-standalone-приложения (см.
+    `.github/workflows/client-build.yml`) указывает на бинарник, а не на то,
+    что реально нужно подменять при обновлении:
 
     - на macOS `--windowed`-сборка всегда оборачивается в
       `X.app/Contents/MacOS/X` — подменять нужно весь `.app`-бандл;

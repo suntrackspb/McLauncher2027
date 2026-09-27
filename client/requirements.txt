@@ -4,4 +4,4 @@ minecraft-launcher-lib==8.0
 psutil==6.1.0
 pytest==8.3.3
 pytest-mock==3.14.0
-pyinstaller==6.10.0
+nuitka==4.2.2

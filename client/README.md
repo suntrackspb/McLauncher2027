@@ -30,7 +30,7 @@
 - `web/` — `index.html`/`style.css`/`script.js`: экраны загрузки, входа/регистрации,
   главный экран с кнопкой "Играть", боковые панели настроек и опциональных модов.
   Тёмная тема, градиенты, анимации; иконки — свой набор inline SVG в CSS
-  (не внешняя библиотека/CDN — нужно для офлайн PyInstaller-сборки).
+  (не внешняя библиотека/CDN — нужно для офлайн сборки).
 - `updater/app_updater.py` — отдельный маленький процесс самообновления,
   запускается лаунчером и закрывает его перед подменой файлов (см. ниже).
 
@@ -38,15 +38,21 @@
 
 ```bash
 pip install -r requirements.txt
-pyinstaller --noconfirm --clean build.spec        # лаунчер -> dist/McLauncher2027(.app)
-pyinstaller updater/app_updater.py --name app_updater --onefile --noconfirm
+# лаунчер -> dist/McLauncher2027(.app) — см. точные флаги в
+# .github/workflows/client-build.yml (разные для Windows/macOS: иконка,
+# --windows-console-mode/--macos-create-app-bundle и т.п.)
+python -m nuitka --standalone --output-dir=dist --include-data-dir=web=web \
+  --include-data-dir=assets=assets --include-package-data=webview app.py
+python -m nuitka --onefile --output-dir=dist --output-filename=app_updater \
+  updater/app_updater.py
 ```
 
-`build.spec` — не onefile, а **onedir**: пивебвью грузит платформенные бэкенды и
-JS-файлы динамически, `collect_all("webview")` + `copy_metadata("pywebview")`
-обязательны, иначе на чистой машине (CI) сборка запускается с пустым окном.
-Из-за onedir и на Windows, и на macOS "лаунчер" — это папка (onedir-директория
-или `.app`-бандл), а не один файл — см. `core/updater/paths.py`. `app_updater`
+Сборка лаунчера — не onefile, а **standalone**: пивебвью грузит платформенные
+бэкенды и JS-файлы динамически, `--include-package-data=webview` и явные
+`--include-module=webview.platforms.*` обязательны, иначе на чистой машине
+(CI) сборка запускается с пустым окном. Из-за standalone и на Windows, и на
+macOS "лаунчер" — это папка (standalone-директория или `.app`-бандл), а не
+один файл — см. `core/updater/paths.py`. `app_updater`
 собирается отдельно и в архиве релиза кладётся **рядом** с папкой/бандлом
 лаунчера, не внутри неё (иначе Windows не даст переименовать директорию, пока
 внутри неё выполняется сам работающий `app_updater.exe`). Автоматизировано в
