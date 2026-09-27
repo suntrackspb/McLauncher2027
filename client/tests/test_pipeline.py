@@ -29,7 +29,7 @@ def test_pipeline_runs_all_steps_in_order(mocker, tmp_path):
     )
     mocker.patch(
         "core.launch.pipeline.patch_authlib_jars",
-        side_effect=lambda *a, **k: events.append("patch_authlib"),
+        side_effect=lambda *a, **k: events.append("patch_authlib") or [],
     )
     mocker.patch(
         "minecraft_launcher_lib.command.get_minecraft_command",
@@ -51,7 +51,7 @@ def test_pipeline_runs_all_steps_in_order(mocker, tmp_path):
         uuid="a" * 32,
         access_token="b" * 32,
         settings=LauncherSettings(),
-        authlib_patched_jars_dir=str(tmp_path / "patched"),
+        authlib_cache_dir=str(tmp_path / "authlib_cache"),
         api_client=fake_api,
         launcher_name="McLauncher2027",
         launcher_version="v1.0.0",
@@ -75,7 +75,7 @@ def test_pipeline_passes_reporter_through_install(mocker, tmp_path):
     fake_api.get_optional_mods.return_value = []
 
     mocker.patch("core.launch.pipeline.apply_sync_plan")
-    mocker.patch("core.launch.pipeline.patch_authlib_jars")
+    mocker.patch("core.launch.pipeline.patch_authlib_jars", return_value=[])
     mocker.patch("minecraft_launcher_lib.command.get_minecraft_command", return_value=[])
 
     reporter = mocker.Mock()
@@ -91,7 +91,7 @@ def test_pipeline_passes_reporter_through_install(mocker, tmp_path):
         uuid="a" * 32,
         access_token="b" * 32,
         settings=LauncherSettings(),
-        authlib_patched_jars_dir=str(tmp_path / "patched"),
+        authlib_cache_dir=str(tmp_path / "authlib_cache"),
         api_client=fake_api,
         launcher_name="McLauncher2027",
         launcher_version="v1.0.0",

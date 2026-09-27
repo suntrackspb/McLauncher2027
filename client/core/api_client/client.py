@@ -39,6 +39,9 @@ class ApiClient:
     def get_profile(self) -> dict:
         return self._get_dict("/api/v1/launcher/profile")
 
+    def get_authlib_jars(self) -> list[dict]:
+        return self._get("/api/v1/launcher/authlib-jars", {})
+
     def _get_dict(self, path: str) -> dict:
         try:
             resp = self._session.get(f"{self.base_url}{path}", timeout=self.timeout)

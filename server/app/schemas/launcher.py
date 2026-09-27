@@ -9,6 +9,11 @@ class LauncherVersionOut(BaseModel):
     updater_url_macos: str
 
 
+class AuthlibJarOut(BaseModel):
+    version: str
+    url: str
+
+
 class ServerProfileOut(BaseModel):
     mc_version: str
     loader: str

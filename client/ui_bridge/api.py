@@ -21,7 +21,6 @@ from ui_bridge.config import (
     API_TIMEOUT_SECONDS,
     APP_FOLDER_NAME,
     APP_NAME,
-    AUTHLIB_PATCHED_DIR,
     BACKEND_URL,
     DOWNLOAD_TIMEOUT_SECONDS,
     LAUNCHER_VERSION,
@@ -47,6 +46,7 @@ class LauncherApi:
         self._api_client = ApiClient(BACKEND_URL, timeout=API_TIMEOUT_SECONDS)
         self._session: dict | None = None
         self._minecraft_directory = str(self._app_data_dir / "minecraft")
+        self._authlib_cache_dir = str(self._app_data_dir / "authlib_cache")
         self._force_reinstall = False
         # Апдейтер удаляет себя не сам (на Windows нельзя удалить файл
         # собственного работающего .exe) — оставшийся с прошлого обновления
@@ -238,7 +238,7 @@ class LauncherApi:
                 uuid=self._session["uuid"],
                 access_token=self._session["access_token"],
                 settings=settings,
-                authlib_patched_jars_dir=AUTHLIB_PATCHED_DIR,
+                authlib_cache_dir=self._authlib_cache_dir,
                 api_client=self._api_client,
                 launcher_name=APP_NAME,
                 launcher_version=LAUNCHER_VERSION,
