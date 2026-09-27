@@ -21,7 +21,10 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  # Гоняется на каждый push/PR — быстрая проверка (секунды), чтобы можно было
+  # спокойно открывать PR и коммитить, не дожидаясь долгой Nuitka-сборки.
+  # Сама сборка (job "build" ниже) запускается только по тегу v* или вручную.
+  test:
     strategy:
       fail-fast: false
       matrix:
@@ -45,12 +48,45 @@ jobs:
 
       - run: python -m pytest -q
 
+  build:
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows
+          - os: macos-latest
+            platform: macos
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r requirements.txt
+
       # Единственное место, где берём APP_NAME/BUNDLE_ID — из ui_bridge/config.py,
       # а не дублируем их строкой здесь (см. историю рассинхрона в git log
       # ui_bridge/config.py).
       - name: Read app metadata
         shell: bash
         run: python -c "from ui_bridge.config import APP_NAME, BUNDLE_ID; print(f'APP_NAME={APP_NAME}'); print(f'BUNDLE_ID={BUNDLE_ID}')" >> "$GITHUB_ENV"
+
+      # Версия лаунчера больше не правится руками перед релизом (см. историю
+      # с забытым обновлением константы) — на тег v1.0.x просто кладём сюда
+      # сам тег, сборка без тега (workflow_dispatch) остаётся с dev-версией
+      # из ui_bridge/_version.py, у неё и не должно быть релиза для сверки.
+      - name: Set launcher version from tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: echo "LAUNCHER_VERSION = \"${GITHUB_REF_NAME}\"" > ui_bridge/_version.py
 
       # onedir/standalone (не onefile) — надёжнее для pywebview, см. build.spec
       # раньше / комментарий в app.py. pywebview грузит платформенные бэкенды

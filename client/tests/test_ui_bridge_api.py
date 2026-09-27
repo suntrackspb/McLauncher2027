@@ -97,6 +97,13 @@ def test_get_optional_mods_marks_enabled_flag(tmp_path, mocker):
     assert by_id == {1: False, 2: True}
 
 
+def test_get_launcher_version_returns_configured_version(tmp_path, mocker):
+    api = _api_with_tmp_settings(tmp_path, mocker)
+    from ui_bridge.config import LAUNCHER_VERSION
+
+    assert api.get_launcher_version() == LAUNCHER_VERSION
+
+
 def test_check_for_update_reports_no_update(tmp_path, mocker):
     api = _api_with_tmp_settings(tmp_path, mocker)
     mocker.patch.object(
