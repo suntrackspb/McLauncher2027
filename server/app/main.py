@@ -26,6 +26,9 @@ _mods_dir = Path(settings.mods_storage_dir)
 _mods_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/mod-files", StaticFiles(directory=_mods_dir), name="mod-files")
 
+_admin_ui_dir = Path(__file__).resolve().parent / "static" / "admin"
+app.mount("/admin", StaticFiles(directory=_admin_ui_dir, html=True), name="admin-ui")
+
 
 @app.get("/health")
 async def health():

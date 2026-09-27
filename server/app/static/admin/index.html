@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>McLauncher2027 — админка</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <section id="screen-login" class="screen">
+    <form id="login-form" class="card">
+      <h1>Вход</h1>
+      <label>Пароль администратора
+        <input type="password" id="login-password" required autofocus />
+      </label>
+      <button type="submit" class="btn btn-primary">Войти</button>
+      <p id="login-error" class="error-text" hidden></p>
+    </form>
+  </section>
+
+  <section id="screen-main" class="screen" hidden>
+    <header class="topbar">
+      <span>McLauncher2027 — админка</span>
+      <button id="btn-logout" class="btn btn-secondary">Выйти</button>
+    </header>
+
+    <main>
+      <section class="card">
+        <h2>Профиль сервера</h2>
+        <form id="profile-form">
+          <label>Версия Minecraft
+            <input type="text" id="profile-mc_version" required placeholder="1.20.1" />
+          </label>
+          <label>Loader
+            <select id="profile-loader">
+              <option value="vanilla">vanilla</option>
+              <option value="forge">forge</option>
+              <option value="fabric">fabric</option>
+              <option value="quilt">quilt</option>
+            </select>
+          </label>
+          <label>Версия loader'а (необязательно)
+            <input type="text" id="profile-loader_version" placeholder="47.4.13" />
+          </label>
+          <label>Адрес сервера
+            <input type="text" id="profile-server_address" required placeholder="127.0.0.1" />
+          </label>
+          <label>Порт сервера
+            <input type="number" id="profile-server_port" required min="1" max="65535" placeholder="25565" />
+          </label>
+          <button type="submit" class="btn btn-primary">Сохранить профиль</button>
+          <p id="profile-status" class="status-text"></p>
+        </form>
+      </section>
+
+      <section class="card">
+        <h2>Загрузить мод</h2>
+        <form id="mod-upload-form">
+          <label>Название
+            <input type="text" id="mod-name" required />
+          </label>
+          <label>Описание (необязательно)
+            <input type="text" id="mod-description" />
+          </label>
+          <label>Тип
+            <select id="mod-type">
+              <option value="required">required</option>
+              <option value="optional">optional</option>
+            </select>
+          </label>
+          <label>Loader
+            <input type="text" id="mod-loader" required placeholder="forge" />
+          </label>
+          <label>Версия Minecraft
+            <input type="text" id="mod-mc_version" required placeholder="1.20.1" />
+          </label>
+          <label>Файл (.jar)
+            <input type="file" id="mod-file" accept=".jar" required />
+          </label>
+          <button type="submit" class="btn btn-primary">Загрузить</button>
+          <p id="mod-upload-status" class="status-text"></p>
+        </form>
+      </section>
+
+      <section class="card">
+        <h2>Моды</h2>
+        <table id="mods-table">
+          <thead>
+            <tr>
+              <th>Название</th>
+              <th>Тип</th>
+              <th>Loader</th>
+              <th>MC</th>
+              <th>Размер</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="mods-tbody"></tbody>
+        </table>
+        <p id="mods-status" class="status-text"></p>
+      </section>
+    </main>
+  </section>
+
+  <script src="app.js"></script>
+</body>
+</html>
