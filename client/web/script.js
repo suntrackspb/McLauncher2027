@@ -48,20 +48,22 @@ function setStatus(text) {
 
 function setProgress(fraction) {
   const fill = document.getElementById("progress-fill");
+  const app = document.getElementById("app");
   if (fraction === null || fraction === undefined) {
     fill.classList.add("indeterminate");
     fill.style.width = "";
     return;
   }
   fill.classList.remove("indeterminate");
-  const pct = Math.max(0, Math.min(1, fraction)) * 100;
-  fill.style.width = `${pct}%`;
+  const clamped = Math.max(0, Math.min(1, fraction));
+  fill.style.width = `${clamped * 100}%`;
+  app.style.setProperty("--p", clamped);
 }
 
 function setPlayButtonBusy(isBusy) {
   const btn = document.getElementById("btn-play");
   btn.disabled = isBusy;
-  btn.querySelector(".play-label").textContent = isBusy ? "ЗАГРУЗКА…" : "ИГРАТЬ";
+  btn.querySelector(".play-label").textContent = isBusy ? "Загрузка…" : "Играть";
 }
 
 // --- callbacks, вызываемые из ui_bridge/reporter.py через evaluate_js ---

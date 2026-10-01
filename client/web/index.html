@@ -10,9 +10,11 @@
 
 <div id="app">
 
+  <canvas id="scene" aria-hidden="true"></canvas>
+
   <!-- Загрузка -->
   <section id="screen-loading" class="screen active">
-    <div class="loader-ring"></div>
+    <div class="cube loader-cube" aria-hidden="true"></div>
     <p class="loader-text">Инициализация…</p>
   </section>
 
@@ -83,7 +85,7 @@
       <div class="play-card">
         <button id="btn-play" class="play-button">
           <span class="play-icon"></span>
-          <span class="play-label">ИГРАТЬ</span>
+          <span class="play-label">Играть</span>
         </button>
 
         <div class="progress-wrap">
@@ -150,6 +152,7 @@
   <div id="overlay" class="overlay"></div>
 </div>
 
+<script src="fx.js"></script>
 <script src="script.js"></script>
 </body>
 </html>
