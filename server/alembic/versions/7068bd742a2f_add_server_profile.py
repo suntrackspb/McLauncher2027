@@ -44,7 +44,7 @@ def upgrade() -> None:
         sa.column('loader_version', sa.String),
         sa.column('server_address', sa.String),
         sa.column('server_port', sa.Integer),
-        sa.column('updated_at', sa.DateTime),
+        sa.column('updated_at', sa.DateTime(timezone=True)),
     )
     op.bulk_insert(server_profile, [{
         'id': 1,
