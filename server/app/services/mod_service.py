@@ -52,4 +52,17 @@ async def delete_mod(db: AsyncSession, mod_id: int) -> None:
     mod = await crud_mod.get_by_id(db, mod_id)
     if not mod:
         raise ServiceError("Мод не найден", error_code="NotFound")
+    file_hash = mod.file_hash
     await crud_mod.delete(db, mod)
+    # один и тот же jar могут использовать несколько записей (хеш = имя файла)
+    if await crud_mod.count_by_hash(db, file_hash) == 0:
+        mod_storage.delete_mod_file(file_hash)
+
+
+async def update_mod(db: AsyncSession, mod_id: int, **fields) -> Mod:
+    mod = await crud_mod.get_by_id(db, mod_id)
+    if not mod:
+        raise ServiceError("Мод не найден", error_code="NotFound")
+    if "name" in fields and not (fields["name"] or "").strip():
+        raise ServiceError("Название не может быть пустым", error_code="BadRequest")
+    return await crud_mod.update(db, mod, **fields)

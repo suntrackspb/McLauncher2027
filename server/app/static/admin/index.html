@@ -4,103 +4,190 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>McLauncher2027 — админка</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Onest:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <section id="screen-login" class="screen">
-    <form id="login-form" class="card">
-      <h1>Вход</h1>
-      <label>Пароль администратора
-        <input type="password" id="login-password" required autofocus />
+  <section id="screen-login" class="login" hidden>
+    <form id="login-form" class="login-card">
+      <h1>McLauncher2027</h1>
+      <p class="muted">Вход в админку</p>
+      <label class="field">Пароль администратора
+        <input type="password" id="login-password" required autofocus autocomplete="current-password" />
       </label>
+      <p id="login-error" class="error-text" role="alert" hidden></p>
       <button type="submit" class="btn btn-primary">Войти</button>
-      <p id="login-error" class="error-text" hidden></p>
     </form>
   </section>
 
-  <section id="screen-main" class="screen" hidden>
-    <header class="topbar">
-      <span>McLauncher2027 — админка</span>
-      <button id="btn-logout" class="btn btn-secondary">Выйти</button>
-    </header>
+  <div id="screen-main" class="shell" hidden>
+    <aside class="sidebar">
+      <div class="brand">McLauncher2027</div>
+      <nav id="nav" aria-label="Разделы">
+        <a href="#/overview" data-route="overview">Обзор</a>
+        <a href="#/mods" data-route="mods">Моды <span class="count" id="nav-mods-count"></span></a>
+        <a href="#/server" data-route="server">Сервер</a>
+      </nav>
+      <button id="btn-logout" class="btn btn-ghost sidebar-foot" type="button">Выйти</button>
+    </aside>
 
-    <main>
-      <section class="card">
-        <h2>Профиль сервера</h2>
-        <form id="profile-form">
-          <label>Версия Minecraft
-            <input type="text" id="profile-mc_version" required placeholder="1.20.1" />
-          </label>
-          <label>Loader
-            <select id="profile-loader">
-              <option value="vanilla">vanilla</option>
-              <option value="forge">forge</option>
-              <option value="fabric">fabric</option>
-              <option value="quilt">quilt</option>
-            </select>
-          </label>
-          <label>Версия loader'а (необязательно)
-            <input type="text" id="profile-loader_version" placeholder="47.4.13" />
-          </label>
-          <label>Адрес сервера
-            <input type="text" id="profile-server_address" required placeholder="127.0.0.1" />
-          </label>
-          <label>Порт сервера
-            <input type="number" id="profile-server_port" required min="1" max="65535" placeholder="25565" />
-          </label>
-          <button type="submit" class="btn btn-primary">Сохранить профиль</button>
-          <p id="profile-status" class="status-text"></p>
-        </form>
-      </section>
+    <div class="content">
+      <div class="profile-strip" id="profile-strip" aria-live="polite"></div>
 
-      <section class="card">
-        <h2>Загрузить мод</h2>
-        <form id="mod-upload-form">
-          <label>Название
-            <input type="text" id="mod-name" required />
-          </label>
-          <label>Описание (необязательно)
-            <input type="text" id="mod-description" />
-          </label>
-          <label>Тип
-            <select id="mod-type">
-              <option value="required">required</option>
-              <option value="optional">optional</option>
-            </select>
-          </label>
-          <label>Loader
-            <input type="text" id="mod-loader" required placeholder="forge" />
-          </label>
-          <label>Версия Minecraft
-            <input type="text" id="mod-mc_version" required placeholder="1.20.1" />
-          </label>
-          <label>Файл (.jar)
-            <input type="file" id="mod-file" accept=".jar" required />
-          </label>
-          <button type="submit" class="btn btn-primary">Загрузить</button>
-          <p id="mod-upload-status" class="status-text"></p>
-        </form>
-      </section>
+      <main>
+        <!-- Обзор -->
+        <section class="page" data-page="overview" hidden>
+          <h1>Обзор</h1>
+          <p class="muted lead">Всё ли готово, чтобы игроки зашли на сервер через лаунчер.</p>
+          <ul class="checks" id="checks"></ul>
+        </section>
 
-      <section class="card">
-        <h2>Моды</h2>
-        <table id="mods-table">
-          <thead>
-            <tr>
-              <th>Название</th>
-              <th>Тип</th>
-              <th>Loader</th>
-              <th>MC</th>
-              <th>Размер</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="mods-tbody"></tbody>
-        </table>
-        <p id="mods-status" class="status-text"></p>
-      </section>
-    </main>
-  </section>
+        <!-- Моды -->
+        <section class="page" data-page="mods" hidden>
+          <div class="page-head">
+            <h1>Моды</h1>
+            <button class="btn btn-primary" id="btn-add-mods" type="button">Добавить моды</button>
+          </div>
+
+          <div class="toolbar">
+            <input type="search" id="mods-search" placeholder="Поиск по названию или файлу" aria-label="Поиск модов" />
+            <label class="switch">
+              <input type="checkbox" id="mods-all-versions" />
+              <span>Показать и другие версии</span>
+            </label>
+          </div>
+
+          <div id="mods-list"></div>
+        </section>
+
+        <!-- Сервер -->
+        <section class="page" data-page="server" hidden>
+          <h1>Сервер</h1>
+          <p class="muted lead">С этим профилем лаунчер ставит Minecraft и подключается к серверу.</p>
+
+          <form id="profile-form" class="panel form-grid" novalidate>
+            <label class="field">Версия Minecraft
+              <input type="text" id="profile-mc_version" required placeholder="1.21" class="mono" />
+            </label>
+            <label class="field">Загрузчик
+              <select id="profile-loader">
+                <option value="vanilla">vanilla</option>
+                <option value="forge">forge</option>
+                <option value="fabric">fabric</option>
+                <option value="quilt">quilt</option>
+              </select>
+            </label>
+            <label class="field" id="field-loader-version">Версия загрузчика
+              <input type="text" id="profile-loader_version" placeholder="51.0.33" class="mono" />
+            </label>
+            <label class="field">Адрес сервера
+              <input type="text" id="profile-server_address" required placeholder="192.168.1.183" class="mono" />
+            </label>
+            <label class="field">Порт
+              <input type="number" id="profile-server_port" required min="1" max="65535" placeholder="25565" class="mono" />
+            </label>
+
+            <p class="notice" id="profile-notice" hidden>
+              После сохранения лаунчеры игроков при следующем запуске заново поставят Minecraft под этот профиль.
+            </p>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary" id="profile-save" disabled>Сохранить профиль</button>
+              <button type="button" class="btn btn-ghost" id="profile-reset" hidden>Отменить изменения</button>
+            </div>
+          </form>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- Добавление модов -->
+  <dialog id="dlg-add" class="dialog dialog-wide">
+    <form method="dialog" class="dialog-head">
+      <h2>Добавить моды</h2>
+      <button class="btn btn-ghost" value="close" aria-label="Закрыть">Закрыть</button>
+    </form>
+
+    <div id="dropzone" class="dropzone" tabindex="0" role="button" aria-label="Выбрать jar-файлы">
+      <p><strong>Перетащите .jar сюда</strong> или нажмите, чтобы выбрать</p>
+      <p class="muted small">Можно сразу несколько файлов</p>
+      <input type="file" id="file-input" accept=".jar" multiple hidden />
+    </div>
+
+    <div class="defaults" id="add-defaults" hidden>
+      <label class="field">Загрузчик
+        <input type="text" id="add-loader" class="mono" />
+      </label>
+      <label class="field">Версия Minecraft
+        <input type="text" id="add-mc_version" class="mono" />
+      </label>
+      <div class="field">Тип для всех
+        <div class="segmented" id="add-type-all" role="group" aria-label="Тип для всех файлов">
+          <button type="button" data-type="required" aria-pressed="true">Обязательный</button>
+          <button type="button" data-type="optional" aria-pressed="false">Необязательный</button>
+        </div>
+      </div>
+    </div>
+
+    <ul class="queue" id="add-queue"></ul>
+
+    <div class="dialog-foot">
+      <p class="muted small" id="add-summary"></p>
+      <button class="btn btn-primary" id="add-submit" type="button" disabled>Загрузить</button>
+    </div>
+  </dialog>
+
+  <!-- Редактирование -->
+  <dialog id="dlg-edit" class="dialog">
+    <form id="edit-form" class="edit-form" novalidate>
+      <div class="dialog-head">
+        <h2>Изменить мод</h2>
+        <button class="btn btn-ghost" type="button" id="edit-close">Закрыть</button>
+      </div>
+      <p class="muted small mono" id="edit-file"></p>
+      <label class="field">Название
+        <input type="text" id="edit-name" required maxlength="128" />
+      </label>
+      <label class="field">Описание
+        <input type="text" id="edit-description" maxlength="512" />
+      </label>
+      <div class="field">Тип
+        <div class="segmented" id="edit-type" role="group" aria-label="Тип мода">
+          <button type="button" data-type="required">Обязательный</button>
+          <button type="button" data-type="optional">Необязательный</button>
+        </div>
+      </div>
+      <div class="two-cols">
+        <label class="field">Загрузчик
+          <input type="text" id="edit-loader" required class="mono" />
+        </label>
+        <label class="field">Версия Minecraft
+          <input type="text" id="edit-mc_version" required class="mono" />
+        </label>
+      </div>
+      <p class="muted small">Сам jar-файл не меняется. Чтобы заменить его, удалите мод и загрузите заново.</p>
+      <div class="dialog-foot">
+        <button class="btn btn-ghost" type="button" id="edit-cancel">Отмена</button>
+        <button class="btn btn-primary" type="submit" id="edit-save" disabled>Сохранить</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Удаление -->
+  <dialog id="dlg-delete" class="dialog">
+    <form method="dialog">
+      <h2>Удалить мод?</h2>
+      <p id="delete-text"></p>
+      <p class="muted small">Мод пропадёт из базы и файл будет удалён с сервера. Игроки перестанут получать его при следующей синхронизации. Отменить удаление нельзя.</p>
+      <div class="dialog-foot">
+        <button class="btn btn-ghost" value="cancel">Отмена</button>
+        <button class="btn btn-danger" value="confirm" id="delete-confirm">Удалить</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toasts" id="toasts" aria-live="polite"></div>
 
   <script src="app.js"></script>
 </body>

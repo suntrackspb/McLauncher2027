@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.mod import Mod, ModType
@@ -52,6 +52,19 @@ async def create(
         mc_version=mc_version,
     )
     db.add(mod)
+    await db.commit()
+    await db.refresh(mod)
+    return mod
+
+
+async def count_by_hash(db: AsyncSession, file_hash: str) -> int:
+    result = await db.execute(select(func.count()).select_from(Mod).where(Mod.file_hash == file_hash))
+    return result.scalar_one()
+
+
+async def update(db: AsyncSession, mod: Mod, **fields) -> Mod:
+    for key, value in fields.items():
+        setattr(mod, key, value)
     await db.commit()
     await db.refresh(mod)
     return mod

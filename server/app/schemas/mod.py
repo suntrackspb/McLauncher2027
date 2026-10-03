@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.mod import ModType
 
@@ -16,3 +16,13 @@ class ModOut(BaseModel):
     mod_type: ModType
     loader: str
     mc_version: str
+
+
+class ModUpdate(BaseModel):
+    """Частичное обновление: меняются только переданные поля. Сам jar не меняется."""
+
+    name: str | None = Field(None, max_length=128)
+    description: str | None = Field(None, max_length=512)
+    mod_type: ModType | None = None
+    loader: str | None = Field(None, min_length=1, max_length=32)
+    mc_version: str | None = Field(None, min_length=1, max_length=32)

@@ -9,7 +9,7 @@ from app.core.database import get_db
 from app.models.mod import ModType
 from app.schemas.admin import AdminLoginRequest, AdminLoginResponse, ServerProfileUpdate
 from app.schemas.launcher import ServerProfileOut
-from app.schemas.mod import ModOut
+from app.schemas.mod import ModOut, ModUpdate
 from app.services import mod_service, profile_service
 from app.services.errors import ServiceError
 
@@ -59,6 +59,24 @@ async def upload_mod(
     except ServiceError as exc:
         raise HTTPException(status_code=400, detail=exc.message) from exc
     return mod
+
+
+@router.patch("/mods/{mod_id}", response_model=ModOut, dependencies=[Depends(require_admin)])
+async def update_mod(mod_id: int, payload: ModUpdate, db: AsyncSession = Depends(get_db)):
+    fields = payload.model_dump(exclude_unset=True)
+    if fields.get("name") is not None:
+        fields["name"] = fields["name"].strip()
+    if "description" in fields and fields["description"] is not None:
+        fields["description"] = fields["description"].strip() or None
+    # name/mod_type/loader/mc_version в БД не nullable — явный null не принимаем
+    for key in ("name", "mod_type", "loader", "mc_version"):
+        if key in fields and fields[key] is None:
+            raise HTTPException(status_code=422, detail=f"Поле {key} не может быть null")
+    try:
+        return await mod_service.update_mod(db, mod_id, **fields)
+    except ServiceError as exc:
+        status = 404 if exc.error_code == "NotFound" else 400
+        raise HTTPException(status_code=status, detail=exc.message) from exc
 
 
 @router.delete("/mods/{mod_id}", status_code=204, dependencies=[Depends(require_admin)])

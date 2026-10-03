@@ -29,6 +29,11 @@ def save_mod_file(content: bytes) -> tuple[str, int]:
     return file_hash, len(content)
 
 
+def delete_mod_file(file_hash: str) -> None:
+    """Удаляет jar из папки; отсутствие файла — не ошибка (мог быть убран руками)."""
+    (_storage_dir() / f"{file_hash}.jar").unlink(missing_ok=True)
+
+
 def mod_url(file_hash: str) -> str:
     base = settings.public_base_url.rstrip("/")
     return f"{base}/mod-files/{file_hash}.jar"

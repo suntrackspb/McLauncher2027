@@ -18,6 +18,8 @@ services:
       DATABASE_URL: postgresql+asyncpg://launcher:launcher@db/launcher
     ports:
       - "8000:8000"
+    volumes:
+      - ./storage:/app/storage
 
 volumes:
   db_data:
