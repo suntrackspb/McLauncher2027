@@ -1,8 +1,11 @@
+import secrets
 import pytest
 
 from app.core.config import settings
 
-TEST_PASSWORD = "not-a-real-admin-secret"  # noqa: S105
+# Случайный на каждый прогон — без строковых литералов, на которые
+# срабатывают сканеры секретов (GitGuardian).
+TEST_PASSWORD = secrets.token_urlsafe(12)
 
 
 @pytest.fixture(autouse=True)

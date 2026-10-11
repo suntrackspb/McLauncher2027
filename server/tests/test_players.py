@@ -1,3 +1,4 @@
+import secrets
 import struct
 import pytest
 
@@ -14,7 +15,9 @@ def _png(width: int, height: int) -> bytes:
 
 FAKE_PNG = _png(64, 64)
 FAKE_CAPE = _png(64, 32)
-DUMMY_PASSWORD = "not-a-real-secret-3"  # noqa: S105
+# Случайный на каждый прогон — без строковых литералов, на которые
+# срабатывают сканеры секретов (GitGuardian).
+DUMMY_PASSWORD = secrets.token_urlsafe(12)
 
 
 @pytest.fixture(autouse=True)

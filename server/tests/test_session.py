@@ -1,7 +1,10 @@
+import secrets
 import struct
 SERVER_ID = "a" * 40
 # Не настоящие учётные данные — фикстура для тестов сессии.
-DUMMY_PASSWORD = "not-a-real-secret-2"  # noqa: S105
+# Случайный на каждый прогон — без строковых литералов, на которые
+# срабатывают сканеры секретов (GitGuardian).
+DUMMY_PASSWORD = secrets.token_urlsafe(12)
 
 
 async def _register_and_login(client, username="Steve", password=DUMMY_PASSWORD):

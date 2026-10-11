@@ -1,5 +1,8 @@
+import secrets
 # Не настоящие учётные данные — фикстуры для тестов registration/login.
-DUMMY_PASSWORD = "not-a-real-secret-1"  # noqa: S105
+# Случайный на каждый прогон — без строковых литералов, на которые
+# срабатывают сканеры секретов (GitGuardian).
+DUMMY_PASSWORD = secrets.token_urlsafe(12)
 
 
 async def test_register_and_login(client):
