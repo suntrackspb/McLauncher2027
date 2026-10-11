@@ -62,6 +62,11 @@ def build_launch_options(
         "resolutionHeight": str(settings.resolution_height),
         "server": profile.server_address,
         "port": str(profile.server_port),
+        # С 1.20 `--server/--port` игнорируются ("Completely ignored arguments"),
+        # автоподключение идёт через Quick Play — mll подставит его сама, если
+        # в JSON версии есть фича is_quick_play_multiplayer. Старые версии
+        # по-прежнему берут --server/--port выше.
+        "quickPlayMultiplayer": f"{profile.server_address}:{profile.server_port}",
     }
     if settings.java_path.strip():
         options["executablePath"] = settings.java_path.strip()

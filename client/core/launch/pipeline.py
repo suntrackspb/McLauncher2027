@@ -27,6 +27,7 @@ def prepare_and_get_launch_command(
     launcher_version: str,
     reporter: ProgressReporter | None = None,
     debug_logger: DebugLogger | None = None,
+    already_installed: bool = False,
 ) -> list[str]:
     """Полный пайплайн одного запуска: установить лоадер -> синхронизировать
     моды с манифестом бэка -> подменить authlib -> собрать команду запуска.
@@ -48,12 +49,24 @@ def prepare_and_get_launch_command(
     log(f"minecraft_directory={minecraft_directory}")
     log(f"username={username} uuid={uuid}")
 
-    log(f"Установка loader'а '{profile.loader}'…")
     loader = get_loader(profile.loader)
-    version_id = loader.install(
-        minecraft_directory, profile.mc_version, profile.loader_version, reporter
-    )
-    log(f"Loader установлен, version_id={version_id}")
+    # Повторный install на каждом запуске не бесплатный: Forge заново качает
+    # и прогоняет установщик, а mll сверяет sha1 всех библиотек и перекачивает
+    # authlib, который мы подменили в прошлый раз. Поэтому, если маркер профиля
+    # совпал (прошлая установка дошла до конца) и версия на месте, — не ставим.
+    if already_installed and loader.is_installed(
+        minecraft_directory, profile.mc_version, profile.loader_version
+    ):
+        version_id = loader.resolve_version_id(
+            minecraft_directory, profile.mc_version, profile.loader_version
+        )
+        log(f"Loader уже установлен, пропуск установки, version_id={version_id}")
+    else:
+        log(f"Установка loader'а '{profile.loader}'…")
+        version_id = loader.install(
+            minecraft_directory, profile.mc_version, profile.loader_version, reporter
+        )
+        log(f"Loader установлен, version_id={version_id}")
 
     if reporter:
         reporter.status("Проверка модов")

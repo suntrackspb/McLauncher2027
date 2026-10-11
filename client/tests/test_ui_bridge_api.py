@@ -5,6 +5,9 @@ from ui_bridge.api import LauncherApi
 
 def _api_with_tmp_settings(tmp_path, mocker):
     mocker.patch("core.settings.store.get_app_data_dir", lambda name: tmp_path)
+    # api.py импортирует get_app_data_dir напрямую — без этого патча тесты
+    # писали бы session.json и прочее в настоящую папку лаунчера.
+    mocker.patch("ui_bridge.api.get_app_data_dir", lambda name: tmp_path)
     return LauncherApi()
 
 
@@ -198,3 +201,87 @@ def test_get_optional_mods_wraps_api_error(tmp_path, mocker):
     result = api.get_optional_mods()
 
     assert result == {"ok": False, "error": "Сервер недоступен"}
+
+
+def _logged_in_api(tmp_path, mocker):
+    api = _api_with_tmp_settings(tmp_path, mocker)
+    api._session = {"username": "steve", "uuid": "a" * 32, "access_token": "b" * 32}
+    api._window = mocker.Mock()
+    return api
+
+
+def _png(width, height):
+    import struct
+
+    ihdr = struct.pack(">II", width, height) + b"\x08\x06\x00\x00\x00"
+    return b"\x89PNG\r\n\x1a\n" + struct.pack(">I", 13) + b"IHDR" + ihdr + b"\x00" * 4
+
+
+def test_upload_texture_sends_picked_file(tmp_path, mocker):
+    api = _logged_in_api(tmp_path, mocker)
+    skin = tmp_path / "skin.png"
+    skin.write_bytes(_png(64, 64))
+    api._window.create_file_dialog.return_value = (str(skin),)
+    upload = mocker.patch.object(api._api_client, "upload_texture", return_value={"ok": True})
+
+    result = api.upload_texture("skin")
+
+    assert result["ok"] is True
+    assert result["data_url"].startswith("data:image/png;base64,")
+    upload.assert_called_once_with("skin", "a" * 32, "b" * 32, _png(64, 64))
+
+
+def test_upload_texture_rejects_wrong_size_without_request(tmp_path, mocker):
+    api = _logged_in_api(tmp_path, mocker)
+    cape = tmp_path / "cape.png"
+    cape.write_bytes(_png(64, 64))
+    api._window.create_file_dialog.return_value = (str(cape),)
+    upload = mocker.patch.object(api._api_client, "upload_texture")
+
+    result = api.upload_texture("cape")
+
+    assert result["ok"] is False
+    upload.assert_not_called()
+
+
+def test_upload_texture_cancelled_dialog(tmp_path, mocker):
+    api = _logged_in_api(tmp_path, mocker)
+    api._window.create_file_dialog.return_value = None
+
+    assert api.upload_texture("skin") == {"ok": True, "cancelled": True}
+
+
+def test_upload_texture_requires_session(tmp_path, mocker):
+    api = _api_with_tmp_settings(tmp_path, mocker)
+
+    assert api.upload_texture("skin")["ok"] is False
+
+
+def test_get_textures_returns_data_urls(tmp_path, mocker):
+    api = _logged_in_api(tmp_path, mocker)
+    mocker.patch.object(api._api_client, "get_texture_urls", return_value={"skin": "http://x/skin.png"})
+    mocker.patch.object(api._api_client, "download_bytes", return_value=_png(64, 64))
+
+    result = api.get_textures()
+
+    assert result["ok"] is True
+    assert result["data"]["skin"].startswith("data:image/png;base64,")
+    assert result["data"]["cape"] is None
+
+
+def test_delete_texture_calls_backend(tmp_path, mocker):
+    api = _logged_in_api(tmp_path, mocker)
+    delete = mocker.patch.object(api._api_client, "delete_texture")
+
+    assert api.delete_texture("cape") == {"ok": True}
+    delete.assert_called_once_with("cape", "a" * 32, "b" * 32)
+
+
+def test_delete_texture_expired_session(tmp_path, mocker):
+    api = _logged_in_api(tmp_path, mocker)
+    mocker.patch.object(api._api_client, "delete_texture", side_effect=ApiError("forbidden", status_code=403))
+
+    result = api.delete_texture("skin")
+
+    assert result["ok"] is False
+    assert "войдите снова" in result["error"]

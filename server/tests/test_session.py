@@ -1,3 +1,4 @@
+import struct
 SERVER_ID = "a" * 40
 # Не настоящие учётные данные — фикстура для тестов сессии.
 DUMMY_PASSWORD = "not-a-real-secret-2"  # noqa: S105
@@ -62,7 +63,10 @@ async def test_profile_includes_textures_after_skin_upload(client, tmp_path, mon
     monkeypatch.setattr(settings, "public_base_url", "http://test.local")
 
     login = await _register_and_login(client)
-    fake_png = b"\x89PNG\r\n\x1a\n" + b"fake-content"
+    fake_png = (
+        b"\x89PNG\r\n\x1a\n" + struct.pack(">I", 13) + b"IHDR"
+        + struct.pack(">II", 64, 64) + b"\x08\x06\x00\x00\x00\x00\x00\x00\x00"
+    )
     upload_resp = await client.post(
         "/api/v1/players/me/skin",
         data={"uuid": login["UUID"], "access_token": login["accessToken"]},

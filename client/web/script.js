@@ -143,6 +143,150 @@ async function loadMods() {
   }
 }
 
+// --- скин и плащ ---
+
+// Развёртка скина: [srcX, srcY, w, h, dstX, dstY] в пикселях 64-px скина;
+// превью — вид спереди 16x32. Старый 64x32 не имеет левых рук/ног и
+// второго слоя на теле — для них зеркалим правые конечности.
+const SKIN_BASE = [
+  [8, 8, 8, 8, 4, 0],    // голова
+  [20, 20, 8, 12, 4, 8], // тело
+  [44, 20, 4, 12, 0, 8], // правая рука
+  [4, 20, 4, 12, 4, 20], // правая нога
+];
+const SKIN_LEFT_LIMBS = [
+  [36, 52, 4, 12, 12, 8], // левая рука
+  [20, 52, 4, 12, 8, 20], // левая нога
+];
+const SKIN_OVERLAY_LEGACY = [[40, 8, 8, 8, 4, 0]]; // шапка
+const SKIN_OVERLAY_MODERN = [
+  [20, 36, 8, 12, 4, 8],  // куртка
+  [44, 36, 4, 12, 0, 8],  // правый рукав
+  [52, 52, 4, 12, 12, 8], // левый рукав
+  [4, 36, 4, 12, 4, 20],  // правая штанина
+  [4, 52, 4, 12, 8, 20],  // левая штанина
+];
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+function drawParts(ctx, img, parts, scale) {
+  for (const [sx, sy, w, h, dx, dy] of parts) {
+    ctx.drawImage(img, sx * scale, sy * scale, w * scale, h * scale, dx, dy, w, h);
+  }
+}
+
+function drawMirrored(ctx, img, [sx, sy, w, h], dx, dy, scale) {
+  ctx.save();
+  ctx.translate(dx + w, dy);
+  ctx.scale(-1, 1);
+  ctx.drawImage(img, sx * scale, sy * scale, w * scale, h * scale, 0, 0, w, h);
+  ctx.restore();
+}
+
+async function renderSkinPreview(dataUrl) {
+  const canvas = document.getElementById("skin-preview");
+  const ctx = canvas.getContext("2d");
+  ctx.imageSmoothingEnabled = false;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  document.getElementById("skin-caption").textContent = dataUrl ? "Скин" : "Скин не загружен";
+  document.getElementById("btn-delete-skin").hidden = !dataUrl;
+  if (!dataUrl) return;
+
+  const img = await loadImage(dataUrl);
+  const scale = img.width / 64;
+  const isLegacy = img.height * 2 === img.width;
+  drawParts(ctx, img, SKIN_BASE, scale);
+  if (isLegacy) {
+    drawMirrored(ctx, img, [44, 20, 4, 12], 12, 8, scale);
+    drawMirrored(ctx, img, [4, 20, 4, 12], 8, 20, scale);
+  } else {
+    drawParts(ctx, img, SKIN_LEFT_LIMBS, scale);
+    drawParts(ctx, img, SKIN_OVERLAY_MODERN, scale);
+  }
+  drawParts(ctx, img, SKIN_OVERLAY_LEGACY, scale);
+}
+
+async function renderCapePreview(dataUrl) {
+  const canvas = document.getElementById("cape-preview");
+  const ctx = canvas.getContext("2d");
+  ctx.imageSmoothingEnabled = false;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  document.getElementById("cape-caption").textContent = dataUrl ? "Плащ" : "Плащ не загружен";
+  document.getElementById("btn-delete-cape").hidden = !dataUrl;
+  if (!dataUrl) return;
+
+  const img = await loadImage(dataUrl);
+  // Старые 22x17 плащи лежат в той же раскладке, что и 64x32, только без
+  // запаса по краям — масштаб считаем от ширины 64 в обоих случаях.
+  const scale = img.width === 22 ? 1 : img.width / 64;
+  ctx.drawImage(img, 1 * scale, 1 * scale, 10 * scale, 16 * scale, 0, 0, 10, 16);
+}
+
+function setTextureStatus(text) {
+  document.getElementById("texture-status").textContent = text;
+}
+
+async function loadTextures() {
+  setTextureStatus("Загрузка…");
+  const result = await window.pywebview.api.get_textures();
+  if (!result.ok) {
+    setTextureStatus(`Ошибка: ${result.error}`);
+    return;
+  }
+  setTextureStatus("");
+  await renderSkinPreview(result.data.skin);
+  await renderCapePreview(result.data.cape);
+}
+
+async function uploadTexture(kind, button) {
+  button.disabled = true;
+  setTextureStatus("");
+  try {
+    const result = await window.pywebview.api.upload_texture(kind);
+    if (!result.ok) {
+      setTextureStatus(`Ошибка: ${result.error}`);
+      return;
+    }
+    if (result.cancelled) return;
+    if (kind === "skin") {
+      await renderSkinPreview(result.data_url);
+      setTextureStatus("Скин обновлён");
+    } else {
+      await renderCapePreview(result.data_url);
+      setTextureStatus("Плащ обновлён");
+    }
+  } finally {
+    button.disabled = false;
+  }
+}
+
+const TEXTURE_RENDERERS = { skin: renderSkinPreview, cape: renderCapePreview };
+const TEXTURE_NAMES = { skin: "скин", cape: "плащ" };
+
+async function deleteTexture(kind, button) {
+  if (!confirm(`Удалить ${TEXTURE_NAMES[kind]}?`)) return;
+  button.disabled = true;
+  setTextureStatus("");
+  try {
+    const result = await window.pywebview.api.delete_texture(kind);
+    if (!result.ok) {
+      setTextureStatus(`Ошибка: ${result.error}`);
+      return;
+    }
+    await TEXTURE_RENDERERS[kind](null);
+    setTextureStatus(kind === "skin" ? "Скин удалён" : "Плащ удалён");
+  } finally {
+    button.disabled = false;
+  }
+}
+
 // --- настройки ---
 
 async function loadSettingsIntoPanel() {
@@ -242,6 +386,27 @@ function initEventHandlers() {
   document.getElementById("btn-mods").addEventListener("click", async () => {
     await loadMods();
     openPanel("panel-mods");
+  });
+
+  document.getElementById("btn-skin").addEventListener("click", async () => {
+    openPanel("panel-skin");
+    await loadTextures();
+  });
+
+  document.getElementById("btn-upload-skin").addEventListener("click", (event) => {
+    uploadTexture("skin", event.currentTarget);
+  });
+
+  document.getElementById("btn-upload-cape").addEventListener("click", (event) => {
+    uploadTexture("cape", event.currentTarget);
+  });
+
+  document.getElementById("btn-delete-skin").addEventListener("click", (event) => {
+    deleteTexture("skin", event.currentTarget);
+  });
+
+  document.getElementById("btn-delete-cape").addEventListener("click", (event) => {
+    deleteTexture("cape", event.currentTarget);
   });
 
   document.querySelectorAll("[data-close]").forEach((btn) => {

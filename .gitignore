@@ -69,6 +69,7 @@ minecraft/
 skins/
 textures/
 !server/app/**/textures/.gitkeep
+!client/core/textures/
 
 # === Node (если появится вспомогательный тулинг) ===
 node_modules/

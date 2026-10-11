@@ -50,14 +50,14 @@ async def set_server_id(db: AsyncSession, player: Player, server_id: str) -> Pla
     return player
 
 
-async def set_skin_hash(db: AsyncSession, player: Player, skin_hash: str) -> Player:
+async def set_skin_hash(db: AsyncSession, player: Player, skin_hash: str | None) -> Player:
     player.skin_hash = skin_hash
     await db.commit()
     await db.refresh(player)
     return player
 
 
-async def set_cape_hash(db: AsyncSession, player: Player, cape_hash: str) -> Player:
+async def set_cape_hash(db: AsyncSession, player: Player, cape_hash: str | None) -> Player:
     player.cape_hash = cape_hash
     await db.commit()
     await db.refresh(player)

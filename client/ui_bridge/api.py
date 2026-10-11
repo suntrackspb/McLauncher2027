@@ -1,3 +1,4 @@
+import base64
 import platform
 import stat
 import subprocess
@@ -14,7 +15,9 @@ from core.debug_log import DebugLogger, debug_log_path, is_debug_flag_set
 from core.launch.options_builder import ServerProfile
 from core.launch.pipeline import prepare_and_get_launch_command
 from core.launch.profile_store import save_installed_profile, sync_install_dir
+from core.settings.session_store import SessionStore
 from core.settings.store import SettingsStore, get_app_data_dir
+from core.textures import TEXTURE_KINDS, check_texture
 from core.updater.paths import cleanup_stale_updater, resolve_launcher_path, updater_binary_path
 from core.updater.version_check import check_for_update
 from ui_bridge.config import (
@@ -44,7 +47,8 @@ class LauncherApi:
         self._app_data_dir = get_app_data_dir(APP_FOLDER_NAME)
         self._settings_store = SettingsStore(APP_FOLDER_NAME)
         self._api_client = ApiClient(BACKEND_URL, timeout=API_TIMEOUT_SECONDS)
-        self._session: dict | None = None
+        self._session_store = SessionStore(self._app_data_dir)
+        self._session: dict | None = self._session_store.load()
         self._minecraft_directory = str(self._app_data_dir / "minecraft")
         self._authlib_cache_dir = str(self._app_data_dir / "authlib_cache")
         self._force_reinstall = False
@@ -151,14 +155,84 @@ class LauncherApi:
             "uuid": data["UUID"],
             "access_token": data["accessToken"],
         }
+        self._session_store.save(self._session)
         return {"ok": True, "data": self._session}
 
     def logout(self) -> dict:
         self._session = None
+        self._session_store.clear()
         return {"ok": True}
 
     def get_session(self) -> dict | None:
         return self._session
+
+    # --- скин и плащ ------------------------------------------------------
+
+    def get_textures(self) -> dict:
+        """Текущие скин/плащ игрока как data:-URL — фронт рисует превью на
+        canvas, а картинка с другого origin (бэкенд) "испортила" бы canvas."""
+        if not self._session:
+            return {"ok": False, "error": "Сначала войдите в аккаунт"}
+        try:
+            urls = self._api_client.get_texture_urls(self._session["uuid"])
+            data = {
+                kind: self._to_data_url(self._api_client.download_bytes(urls[kind])) if kind in urls else None
+                for kind in TEXTURE_KINDS
+            }
+        except ApiError as exc:
+            return {"ok": False, "error": str(exc)}
+        return {"ok": True, "data": data}
+
+    def upload_texture(self, kind: str) -> dict:
+        """Нативный диалог выбора PNG -> проверка -> загрузка на бэкенд.
+        {"ok": True, "cancelled": True}, если игрок закрыл диалог."""
+        if kind not in TEXTURE_KINDS:
+            return {"ok": False, "error": f"Неизвестный тип текстуры: {kind}"}
+        if not self._session:
+            return {"ok": False, "error": "Сначала войдите в аккаунт"}
+        if not self._window:
+            return {"ok": False, "error": "Окно лаунчера недоступно"}
+
+        picked = self._window.create_file_dialog(
+            webview.FileDialog.OPEN, file_types=("PNG (*.png)",)
+        )
+        if not picked:
+            return {"ok": True, "cancelled": True}
+
+        try:
+            content = Path(picked[0]).read_bytes()
+        except OSError as exc:
+            return {"ok": False, "error": f"Не удалось прочитать файл: {exc}"}
+        error = check_texture(kind, content)
+        if error:
+            return {"ok": False, "error": error}
+
+        try:
+            self._api_client.upload_texture(
+                kind, self._session["uuid"], self._session["access_token"], content
+            )
+        except ApiError as exc:
+            if exc.status_code == 403:
+                return {"ok": False, "error": "Сессия устарела — выйдите и войдите снова"}
+            return {"ok": False, "error": str(exc)}
+        return {"ok": True, "data_url": self._to_data_url(content)}
+
+    def delete_texture(self, kind: str) -> dict:
+        if kind not in TEXTURE_KINDS:
+            return {"ok": False, "error": f"Неизвестный тип текстуры: {kind}"}
+        if not self._session:
+            return {"ok": False, "error": "Сначала войдите в аккаунт"}
+        try:
+            self._api_client.delete_texture(kind, self._session["uuid"], self._session["access_token"])
+        except ApiError as exc:
+            if exc.status_code == 403:
+                return {"ok": False, "error": "Сессия устарела — выйдите и войдите снова"}
+            return {"ok": False, "error": str(exc)}
+        return {"ok": True}
+
+    @staticmethod
+    def _to_data_url(content: bytes) -> str:
+        return "data:image/png;base64," + base64.b64encode(content).decode()
 
     # --- опциональные моды -------------------------------------------------
 
@@ -244,6 +318,7 @@ class LauncherApi:
                 launcher_version=LAUNCHER_VERSION,
                 reporter=reporter,
                 debug_logger=debug_logger,
+                already_installed=not wiped,
             )
             save_installed_profile(self._app_data_dir, profile)
         except Exception as exc:  # noqa: BLE001 — репортим в UI любую причину провала

@@ -40,3 +40,33 @@ async def upload_cape(
         response.status_code = 403 if exc.error_code == "FORBIDDEN" else 400
         return ErrorResponse(error=exc.error_code, error_message=exc.message).model_dump(by_alias=True)
     return TextureUploadOut(ok=True, hash=cape_hash)
+
+
+@router.delete("/me/skin")
+async def delete_skin(
+    response: Response,
+    uuid: str = Form(...),
+    access_token: str = Form(...),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        await player_service.delete_skin(db, uuid, access_token)
+    except ServiceError as exc:
+        response.status_code = 403 if exc.error_code == "FORBIDDEN" else 400
+        return ErrorResponse(error=exc.error_code, error_message=exc.message).model_dump(by_alias=True)
+    return {"ok": True}
+
+
+@router.delete("/me/cape")
+async def delete_cape(
+    response: Response,
+    uuid: str = Form(...),
+    access_token: str = Form(...),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        await player_service.delete_cape(db, uuid, access_token)
+    except ServiceError as exc:
+        response.status_code = 403 if exc.error_code == "FORBIDDEN" else 400
+        return ErrorResponse(error=exc.error_code, error_message=exc.message).model_dump(by_alias=True)
+    return {"ok": True}

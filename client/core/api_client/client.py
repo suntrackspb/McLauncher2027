@@ -1,3 +1,6 @@
+import base64
+import json
+
 import requests
 
 
@@ -42,6 +45,63 @@ class ApiClient:
     def get_authlib_jars(self) -> list[dict]:
         return self._get("/api/v1/launcher/authlib-jars", {})
 
+    def upload_texture(self, kind: str, uuid: str, access_token: str, content: bytes) -> dict:
+        """kind — "skin" или "cape" (POST /api/v1/players/me/{kind})."""
+        try:
+            resp = self._session.post(
+                f"{self.base_url}/api/v1/players/me/{kind}",
+                data={"uuid": uuid, "access_token": access_token},
+                files={"file": (f"{kind}.png", content, "image/png")},
+                timeout=self.timeout,
+            )
+        except requests.RequestException as exc:
+            raise ApiError(f"Не удалось связаться с сервером: {exc}") from exc
+        if resp.status_code != 200:
+            raise ApiError(self._extract_message(resp), status_code=resp.status_code)
+        return resp.json()
+
+    def delete_texture(self, kind: str, uuid: str, access_token: str) -> None:
+        """kind — "skin" или "cape" (DELETE /api/v1/players/me/{kind})."""
+        try:
+            resp = self._session.delete(
+                f"{self.base_url}/api/v1/players/me/{kind}",
+                data={"uuid": uuid, "access_token": access_token},
+                timeout=self.timeout,
+            )
+        except requests.RequestException as exc:
+            raise ApiError(f"Не удалось связаться с сервером: {exc}") from exc
+        if resp.status_code != 200:
+            raise ApiError(self._extract_message(resp), status_code=resp.status_code)
+
+    def get_texture_urls(self, uuid: str) -> dict[str, str]:
+        """Текущие ссылки на скин/плащ игрока из Yggdrasil-профиля
+        (GET /api/v1/profile) — {"skin": url, "cape": url}, без отсутствующих."""
+        try:
+            resp = self._session.get(
+                f"{self.base_url}/api/v1/profile", params={"uuid": uuid}, timeout=self.timeout
+            )
+        except requests.RequestException as exc:
+            raise ApiError(f"Не удалось связаться с сервером: {exc}") from exc
+        if resp.status_code == 404:
+            return {}
+        if resp.status_code != 200:
+            raise ApiError(self._extract_message(resp), status_code=resp.status_code)
+
+        for prop in resp.json().get("properties", []):
+            if prop.get("name") == "textures":
+                textures = json.loads(base64.b64decode(prop["value"])).get("textures", {})
+                return {kind.lower(): data["url"] for kind, data in textures.items() if "url" in data}
+        return {}
+
+    def download_bytes(self, url: str) -> bytes:
+        try:
+            resp = self._session.get(url, timeout=self.timeout)
+        except requests.RequestException as exc:
+            raise ApiError(f"Не удалось связаться с сервером: {exc}") from exc
+        if resp.status_code != 200:
+            raise ApiError(f"HTTP {resp.status_code}", status_code=resp.status_code)
+        return resp.content
+
     def _get_dict(self, path: str) -> dict:
         try:
             resp = self._session.get(f"{self.base_url}{path}", timeout=self.timeout)
@@ -73,6 +133,6 @@ class ApiClient:
     def _extract_message(resp: requests.Response) -> str:
         try:
             body = resp.json()
-            return body.get("detail") or body.get("error_message") or str(body)
+            return body.get("detail") or body.get("errorMessage") or body.get("error_message") or str(body)
         except ValueError:
             return resp.text or f"HTTP {resp.status_code}"

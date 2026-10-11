@@ -44,6 +44,7 @@ def test_build_launch_options_maps_all_fields():
     assert options["token"] == "b" * 32
     assert options["server"] == "mc.example.com"
     assert options["port"] == "25565"
+    assert options["quickPlayMultiplayer"] == "mc.example.com:25565"
     assert options["resolutionWidth"] == "1920"
     assert options["resolutionHeight"] == "1080"
     assert options["customResolution"] is True

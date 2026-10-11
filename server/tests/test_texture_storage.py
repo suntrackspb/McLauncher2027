@@ -1,3 +1,4 @@
+import struct
 import pytest
 
 from app.core.config import settings
@@ -5,7 +6,16 @@ from app.services import texture_storage
 from app.services.errors import ServiceError
 
 PNG_HEADER = b"\x89PNG\r\n\x1a\n"
-FAKE_PNG = PNG_HEADER + b"fake-content"
+
+
+def _png(width: int, height: int) -> bytes:
+    """Минимальный PNG: сигнатура + IHDR — сервер смотрит только на них."""
+    ihdr = struct.pack(">II", width, height) + b"\x08\x06\x00\x00\x00"
+    return PNG_HEADER + struct.pack(">I", 13) + b"IHDR" + ihdr + b"\x00\x00\x00\x00" + b"fake-content"
+
+
+FAKE_PNG = _png(64, 64)
+FAKE_CAPE = _png(64, 32)
 
 
 @pytest.fixture(autouse=True)
@@ -34,8 +44,8 @@ def test_save_texture_rejects_oversized_file():
 
 
 def test_save_texture_deduplicates_identical_content():
-    first_hash = texture_storage.save_texture("cape", FAKE_PNG)
-    second_hash = texture_storage.save_texture("cape", FAKE_PNG)
+    first_hash = texture_storage.save_texture("cape", FAKE_CAPE)
+    second_hash = texture_storage.save_texture("cape", FAKE_CAPE)
     assert first_hash == second_hash
     files = list(texture_storage._storage_dir("cape").glob("*.png"))
     assert len(files) == 1
@@ -44,3 +54,17 @@ def test_save_texture_deduplicates_identical_content():
 def test_texture_url_builds_absolute_link():
     url = texture_storage.texture_url("skin", "abc123")
     assert url == "http://test.local/textures/skin/abc123.png"
+
+
+def test_save_texture_rejects_wrong_size():
+    with pytest.raises(ServiceError):
+        texture_storage.save_texture("skin", _png(100, 100))
+    with pytest.raises(ServiceError):
+        texture_storage.save_texture("cape", _png(64, 64))
+
+
+def test_save_texture_accepts_known_sizes():
+    texture_storage.save_texture("skin", _png(64, 32))
+    texture_storage.save_texture("skin", _png(128, 128))
+    texture_storage.save_texture("cape", _png(64, 32))
+    texture_storage.save_texture("cape", _png(22, 17))

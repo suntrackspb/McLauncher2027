@@ -76,6 +76,7 @@
         <span id="current-username" class="username-pill"></span>
         <button id="btn-settings" class="icon-btn" title="Настройки" aria-label="Настройки"></button>
         <button id="btn-mods" class="icon-btn" title="Опциональные моды" aria-label="Моды"></button>
+        <button id="btn-skin" class="icon-btn" title="Скин и плащ" aria-label="Скин и плащ"></button>
         <button id="btn-reinstall" class="icon-btn" title="Переустановить" aria-label="Переустановить"></button>
         <button id="btn-logout" class="icon-btn" title="Выйти" aria-label="Выйти"></button>
       </div>
@@ -146,6 +147,36 @@
     </div>
     <div class="side-panel-body">
       <ul id="mods-list" class="mods-list"></ul>
+    </div>
+  </aside>
+
+  <!-- Панель скина и плаща -->
+  <aside id="panel-skin" class="side-panel">
+    <div class="side-panel-header">
+      <h2>Скин и плащ</h2>
+      <button class="icon-btn close-btn" data-close="panel-skin"></button>
+    </div>
+    <div class="side-panel-body">
+      <div class="texture-previews">
+        <figure class="texture-card">
+          <canvas id="skin-preview" class="texture-canvas" width="16" height="32"></canvas>
+          <figcaption id="skin-caption">Скин</figcaption>
+        </figure>
+        <figure class="texture-card">
+          <canvas id="cape-preview" class="texture-canvas" width="10" height="16"></canvas>
+          <figcaption id="cape-caption">Плащ</figcaption>
+        </figure>
+      </div>
+      <div class="texture-actions">
+        <button id="btn-upload-skin" class="btn btn-secondary" type="button">Загрузить скин…</button>
+        <button id="btn-delete-skin" class="btn btn-danger" type="button" title="Удалить скин" hidden>Удалить</button>
+      </div>
+      <div class="texture-actions">
+        <button id="btn-upload-cape" class="btn btn-secondary" type="button">Загрузить плащ…</button>
+        <button id="btn-delete-cape" class="btn btn-danger" type="button" title="Удалить плащ" hidden>Удалить</button>
+      </div>
+      <p class="texture-hint">PNG: скин 64×64 или 64×32, плащ 64×32. Игроки увидят изменения после перезахода на сервер.</p>
+      <p id="texture-status" class="status-text"></p>
     </div>
   </aside>
 

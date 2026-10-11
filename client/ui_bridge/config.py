@@ -19,7 +19,7 @@ APP_FOLDER_NAME = ".mcweekend2027"
 # как ID пакета на других платформах.
 BUNDLE_ID = "ru.spbwar.mclauncher2027"
 
-BACKEND_URL = "http://127.0.0.1:8000"
+BACKEND_URL = "http://192.168.10.111:8000"
 
 # LAUNCHER_VERSION больше не хардкодится тут — CI сама прописывает его в
 # ui_bridge/_version.py из git-тега перед сборкой релиза (см. workflow),

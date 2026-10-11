@@ -24,3 +24,15 @@ async def upload_cape(db: AsyncSession, uuid: str, access_token: str, content: b
     cape_hash = texture_storage.save_texture("cape", content)
     await crud_player.set_cape_hash(db, player, cape_hash)
     return cape_hash
+
+
+async def delete_skin(db: AsyncSession, uuid: str, access_token: str) -> None:
+    """Сбрасывает только ссылку у игрока — сам PNG лежит под хешем содержимого
+    и может быть общим с другими игроками (см. texture_storage.save_texture)."""
+    player = await _authorize(db, uuid, access_token)
+    await crud_player.set_skin_hash(db, player, None)
+
+
+async def delete_cape(db: AsyncSession, uuid: str, access_token: str) -> None:
+    player = await _authorize(db, uuid, access_token)
+    await crud_player.set_cape_hash(db, player, None)
