@@ -13,7 +13,7 @@ from ui_bridge._version import LAUNCHER_VERSION
 # не зашиты в сборку — качаются с бэкенда и кэшируются локально (см.
 # core/launch/authlib_patch.py, GET /api/v1/launcher/authlib-jars).
 
-APP_NAME = "McNYWeekend2027"
+APP_NAME = "Minecraft New Year Weekend 2027"
 APP_FOLDER_NAME = ".mcweekend2027"
 # Обратный домен для macOS-бандла (build.spec) — идентификатор приложения,
 # как ID пакета на других платформах.
