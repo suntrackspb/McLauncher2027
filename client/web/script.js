@@ -52,24 +52,71 @@ function setProgress(fraction) {
   if (fraction === null || fraction === undefined) {
     fill.classList.add("indeterminate");
     fill.style.width = "";
+    if (playButtonBusy) renderPlayLabel(null);
     return;
   }
   fill.classList.remove("indeterminate");
   const clamped = Math.max(0, Math.min(1, fraction));
   fill.style.width = `${clamped * 100}%`;
   app.style.setProperty("--p", clamped);
+  if (playButtonBusy) renderPlayLabel(clamped);
+}
+
+// Прогресс загрузки дублируется крупно на самой кнопке, пока она занята.
+let playButtonBusy = false;
+let gameInstalled = true;
+
+function renderPlayLabel(fraction) {
+  const label = document.querySelector("#btn-play .play-label");
+  if (playButtonBusy) {
+    label.textContent = fraction == null ? "…" : `${Math.round(fraction * 100)}%`;
+  } else {
+    label.textContent = gameInstalled ? "PLAY" : "INSTALL";
+  }
 }
 
 function setPlayButtonBusy(isBusy) {
-  const btn = document.getElementById("btn-play");
-  btn.disabled = isBusy;
-  btn.querySelector(".play-label").textContent = isBusy ? "Загрузка…" : "Играть";
+  playButtonBusy = isBusy;
+  document.getElementById("btn-play").disabled = isBusy;
+  renderPlayLabel(0);
+}
+
+const LOADER_NAMES = { forge: "Forge", neoforge: "NeoForge", fabric: "Fabric", quilt: "Quilt" };
+
+async function loadProfileInfo() {
+  const result = await window.pywebview.api.get_profile();
+  const box = document.getElementById("profile-info");
+  if (!result.ok) {
+    box.hidden = true;
+    return;
+  }
+  const p = result.profile;
+  const loader = LOADER_NAMES[p.loader];
+  const build = `Minecraft ${p.mc_version}`;
+  document.getElementById("profile-build").textContent = loader
+    ? `${build} + ${loader}${p.loader_version ? ` ${p.loader_version}` : ""}`
+    : build;
+  document.getElementById("profile-server").textContent =
+    p.server_port === 25565 ? p.server_address : `${p.server_address}:${p.server_port}`;
+  box.hidden = false;
+}
+
+async function refreshInstallState() {
+  gameInstalled = await window.pywebview.api.is_installed();
+  document.querySelector(".play-slot").dataset.mode = gameInstalled ? "play" : "install";
+  renderPlayLabel(0);
 }
 
 // --- callbacks, вызываемые из ui_bridge/reporter.py через evaluate_js ---
 
 window.onLauncherStatus = function onLauncherStatus(text) {
   setStatus(text);
+  // Финальные статусы фонового потока: игра запущена или установка упала.
+  if (text === "Запуск игры" || text.startsWith("Ошибка")) {
+    setPlayButtonBusy(false);
+    refreshInstallState();
+    loadProfileInfo();
+  }
 };
 
 window.onLauncherProgress = function onLauncherProgress(current, total) {
@@ -190,6 +237,44 @@ function drawMirrored(ctx, img, [sx, sy, w, h], dx, dy, scale) {
   ctx.restore();
 }
 
+// Голова Стива по пикселям — когда у игрока нет своего скина.
+const STEVE_FACE = [
+  "hhhhhhhh",
+  "hhhhhhhh",
+  "hssssssh",
+  "ssssssss",
+  "swbssbws",
+  "sssnnsss",
+  "ssmssmss",
+  "ssmmmmss",
+];
+const STEVE_COLORS = { h: "#3b2716", s: "#b98a6c", n: "#94634a", w: "#ffffff", b: "#4a3b8f", m: "#6b3e2e" };
+
+async function renderUserHead(dataUrl) {
+  const canvas = document.getElementById("user-head");
+  const ctx = canvas.getContext("2d");
+  ctx.imageSmoothingEnabled = false;
+  ctx.clearRect(0, 0, 8, 8);
+  if (!dataUrl) {
+    STEVE_FACE.forEach((row, y) => [...row].forEach((c, x) => {
+      ctx.fillStyle = STEVE_COLORS[c];
+      ctx.fillRect(x, y, 1, 1);
+    }));
+    return;
+  }
+  const img = await loadImage(dataUrl);
+  const scale = img.width / 64;
+  // лицо (8,8) и поверх — слой шапки/волос (40,8), как в игре
+  ctx.drawImage(img, 8 * scale, 8 * scale, 8 * scale, 8 * scale, 0, 0, 8, 8);
+  ctx.drawImage(img, 40 * scale, 8 * scale, 8 * scale, 8 * scale, 0, 0, 8, 8);
+}
+
+async function loadUserHead() {
+  await renderUserHead(null);
+  const result = await window.pywebview.api.get_textures();
+  if (result.ok) await renderUserHead(result.data.skin);
+}
+
 async function renderSkinPreview(dataUrl) {
   const canvas = document.getElementById("skin-preview");
   const ctx = canvas.getContext("2d");
@@ -197,6 +282,7 @@ async function renderSkinPreview(dataUrl) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   document.getElementById("skin-caption").textContent = dataUrl ? "Скин" : "Скин не загружен";
   document.getElementById("btn-delete-skin").hidden = !dataUrl;
+  renderUserHead(dataUrl);
   if (!dataUrl) return;
 
   const img = await loadImage(dataUrl);
@@ -462,6 +548,9 @@ async function enterMainScreen(username) {
   setProgress(0);
   document.getElementById("progress-fill").style.width = "0%";
   setPlayButtonBusy(false);
+  refreshInstallState();
+  loadProfileInfo();
+  loadUserHead();
   showScreen("screen-main");
 
   const version = await window.pywebview.api.get_launcher_version();

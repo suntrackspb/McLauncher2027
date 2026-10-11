@@ -6,6 +6,7 @@ import sys
 import threading
 from dataclasses import asdict, replace
 from pathlib import Path
+from urllib.parse import urlparse
 
 import requests
 import webview
@@ -14,7 +15,8 @@ from core.api_client.client import ApiClient, ApiError
 from core.debug_log import DebugLogger, debug_log_path, is_debug_flag_set
 from core.launch.options_builder import ServerProfile
 from core.launch.pipeline import prepare_and_get_launch_command
-from core.launch.profile_store import save_installed_profile, sync_install_dir
+from core.launch.servers_dat import write_server_bookmark
+from core.launch.profile_store import load_installed_profile, save_installed_profile, sync_install_dir
 from core.settings.session_store import SessionStore
 from core.settings.store import SettingsStore, get_app_data_dir
 from core.textures import TEXTURE_KINDS, check_texture
@@ -29,6 +31,28 @@ from ui_bridge.config import (
     LAUNCHER_VERSION,
 )
 from ui_bridge.reporter import WebviewProgressReporter
+
+
+def _server_address(profile: ServerProfile) -> str:
+    """Адрес для списка серверов: стандартный порт игра подставит сама."""
+    if profile.server_port == 25565:
+        return profile.server_address
+    return f"{profile.server_address}:{profile.server_port}"
+
+
+def _describe_error(exc: Exception) -> str:
+    """Сетевые ошибки requests — это многострочное полотно про пулы соединений;
+    в UI показываем, к какому серверу не достучались и что делать."""
+    if isinstance(exc, requests.ConnectionError):
+        url = getattr(exc.request, "url", None) or ""
+        server = urlparse(url).hostname or "сервером загрузки"
+        return (
+            f"нет связи с {server}. Проверьте интернет и нажмите кнопку ещё раз — "
+            "уже скачанные файлы повторно качаться не будут"
+        )
+    if isinstance(exc, requests.Timeout):
+        return "сервер загрузки не ответил вовремя. Нажмите кнопку ещё раз"
+    return str(exc)
 
 
 class LauncherApi:
@@ -260,6 +284,20 @@ class LauncherApi:
 
     # --- запуск игры -----------------------------------------------------
 
+    def get_profile(self) -> dict:
+        """Профиль сборки с бэка — показываем в UI, что именно будет
+        установлено/запущено. Ошибку сети не пробрасываем: это лишь подпись."""
+        try:
+            return {"ok": True, "profile": self._api_client.get_profile()}
+        except ApiError as exc:
+            return {"ok": False, "error": str(exc)}
+
+    def is_installed(self) -> bool:
+        """Есть ли локально установленная сборка — от этого зависит надпись
+        на главной кнопке (PLAY или INSTALL). Совпадение с профилем сервера
+        не проверяем: это сетевой запрос, а play() сам доустановит отличия."""
+        return load_installed_profile(self._app_data_dir) is not None
+
     def play(self) -> dict:
         if not self._session:
             return {"ok": False, "error": "Сначала войдите в аккаунт"}
@@ -321,10 +359,17 @@ class LauncherApi:
                 already_installed=not wiped,
             )
             save_installed_profile(self._app_data_dir, profile)
+            try:
+                write_server_bookmark(
+                    Path(self._minecraft_directory), APP_NAME, _server_address(profile)
+                )
+            except OSError as exc:
+                # Без закладки игра всё равно зайдёт на сервер через quickPlay.
+                debug_logger.log(f"Не удалось записать servers.dat: {exc!r}")
         except Exception as exc:  # noqa: BLE001 — репортим в UI любую причину провала
             debug_logger.log(f"ОШИБКА: {exc!r}")
             if reporter:
-                reporter.status(f"Ошибка: {exc}")
+                reporter.status(f"Ошибка: {_describe_error(exc)}")
             return
 
         debug_logger.log("Запуск процесса игры…")

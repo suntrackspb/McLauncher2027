@@ -74,3 +74,40 @@ def test_mod_loader_strategy_is_installed_false_on_error(mocker):
 
     strategy = ModLoaderStrategy("fabric")
     assert strategy.is_installed("/tmp/mc", "1.20.1") is False
+
+
+class _RecordingReporter:
+    def __init__(self):
+        self.statuses = []
+        self.progresses = []
+
+    def status(self, message):
+        self.statuses.append(message)
+
+    def progress(self, current, maximum):
+        self.progresses.append((current, maximum))
+
+
+def test_callback_dict_drops_per_file_statuses_and_translates_stages():
+    from core.loaders.base import to_callback_dict
+
+    reporter = _RecordingReporter()
+    callback = to_callback_dict(reporter)
+    callback["setStatus"]("Download Assets")
+    callback["setStatus"]("Download f169c2bd7d40b3078e8e27c379904c3629f49482")
+    callback["setStatus"]("Running forge installer")
+
+    assert reporter.statuses == ["Загрузка ресурсов игры", "Running forge installer"]
+
+
+def test_callback_dict_reports_progress_once_per_percent():
+    from core.loaders.base import to_callback_dict
+
+    reporter = _RecordingReporter()
+    callback = to_callback_dict(reporter)
+    callback["setMax"](1000)
+    for i in range(1, 1001):
+        callback["setProgress"](i)
+
+    assert len(reporter.progresses) == 101  # 0%..100%
+    assert reporter.progresses[-1] == (1000, 1000)
