@@ -14,3 +14,9 @@ class WebviewProgressReporter:
 
     def progress(self, current: int, maximum: int) -> None:
         self._window.evaluate_js(f"window.onLauncherProgress({current}, {maximum})")
+
+    def game_state(self, running: bool, message: str) -> None:
+        """Игра запустилась/закрылась — фронт переключает PLAY <-> KILL."""
+        self._window.evaluate_js(
+            f"window.onGameState({json.dumps(running)}, {json.dumps(message)})"
+        )

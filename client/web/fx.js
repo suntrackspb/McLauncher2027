@@ -128,11 +128,13 @@
   }
 
   const lerp = (a, b, t) => a + (b - a) * t;
+  // Биом «снежная тундра»: холодные сумерки — глубокий синий уходит в
+  // бирюзу и бледную полосу у горизонта.
   const SKY = [
-    [0, [14, 20, 54]],
-    [0.4, [52, 44, 118]],
-    [0.72, [190, 98, 112]],
-    [1, [252, 176, 92]],
+    [0, [10, 22, 56]],
+    [0.42, [28, 70, 118]],
+    [0.78, [96, 152, 186]],
+    [1, [206, 224, 236]],
   ];
 
   function skyColor(t) {
@@ -144,7 +146,7 @@
         return `rgb(${c0.map((v, j) => Math.round(lerp(v, c1[j], k))).join(",")})`;
       }
     }
-    return "rgb(252,176,92)";
+    return "rgb(206,224,236)";
   }
 
   // небо ступенчатыми полосами, как в игре
@@ -159,53 +161,109 @@
   s.fillStyle = skyColor(1);
   s.fillRect(0, horizon, W, H - horizon);
 
-  // квадратное закатное солнце
-  const sx = Math.floor(W * 0.7);
-  const sy = Math.floor(H * 0.52);
-  [[34, 0.1], [24, 0.14], [14, 1]].forEach(([size, alpha], i) => {
-    s.fillStyle = i === 2 ? "#fff1b0" : `rgba(255, 214, 140, ${alpha})`;
+  // низкое бледное солнце полярного дня
+  const sx = Math.floor(W * 0.78);
+  const sy = Math.floor(H * 0.4);
+  [[36, 0.08], [24, 0.14], [12, 1]].forEach(([size, alpha], i) => {
+    s.fillStyle = i === 2 ? "#f4fbff" : `rgba(220, 240, 255, ${alpha})`;
     s.fillRect(sx - size / 2, sy - size / 2, size, size);
   });
 
-  // холмы тремя слоями, колонки по 4 пикселя
-  const hills = layer();
-  const h = hills.getContext("2d");
+  const land = layer();
+  const h = land.getContext("2d");
+  const rect = (color, x, y, w, hgt) => {
+    h.fillStyle = color;
+    h.fillRect(x, y, w, hgt);
+  };
 
-  function ridge(base, amp, color, phase, snow) {
+  // дальние горы: зубчатые блоки по 4 пикселя, верх в снегу
+  function mountains(base, amp, color, cap, phase) {
     for (let x = 0; x < W; x += 4) {
-      const wave = Math.sin(x * 0.021 + phase) * amp + Math.sin(x * 0.057 + phase * 2) * amp * 0.45;
-      const top = Math.round((base + wave) / 2) * 2;
-      h.fillStyle = color;
-      h.fillRect(x, top, 4, H - top);
-      if (snow) {
-        h.fillStyle = snow;
-        h.fillRect(x, top, 4, 2);
-      }
+      const peak = Math.abs(Math.sin(x * 0.013 + phase)) * amp + Math.sin(x * 0.07 + phase) * 3;
+      const top = Math.round((base - peak) / 2) * 2;
+      rect(color, x, top, 4, H - top);
+      if (peak > amp * 0.45) rect(cap, x, top, 4, peak > amp * 0.8 ? 6 : 4);
+    }
+  }
+
+  // равнина тундры — почти плоская, перепады ровно на «блок» (2 пикселя)
+  function plain(base, color, edge, seed) {
+    const pr = rng(seed);
+    let y = base;
+    for (let x = 0; x < W; x += 8) {
+      if (pr() < 0.3) y = base + (pr() < 0.5 ? -2 : 2);
+      rect(color, x, y, 8, H - y);
+      rect(edge, x, y, 8, 1);
     }
   }
 
   // ель ярусами, на каждом ярусе снег
-  function tree(x, y) {
-    h.fillStyle = "#4b3320";
-    h.fillRect(x, y - 3, 2, 3);
-    const tiers = [[8, y - 7], [6, y - 11], [4, y - 15], [2, y - 18]];
-    for (const [w, ty] of tiers) {
-      h.fillStyle = "#1c4a3a";
-      h.fillRect(x + 1 - w / 2, ty, w, 4);
-      h.fillStyle = "#dfe8f6";
-      h.fillRect(x + 1 - w / 2 + 1, ty, Math.max(2, w - 2), 1);
+  function tree(x, y, size = 1) {
+    rect("#3d2a1c", x, y - 3, 2, 3);
+    const tiers = size > 1 ? [[10, 7], [8, 11], [6, 15], [4, 19], [2, 22]] : [[8, 7], [6, 11], [4, 15], [2, 18]];
+    for (const [w, dy] of tiers) {
+      rect("#173f39", x + 1 - w / 2, y - dy, w, 4);
+      rect("#e6eef8", x + 2 - w / 2, y - dy, Math.max(2, w - 2), 1);
     }
   }
 
-  ridge(horizon - 30, 8, "#3a3a7c", 1.2, "#8e8dc4");
-  ridge(horizon - 14, 7, "#2b4f63", 3.1, "#a9bfd4");
-  for (let x = 14; x < W; x += 12 + Math.floor(r() * 22)) {
-    const wave = Math.sin(x * 0.021 + 3.1) * 7 + Math.sin(x * 0.057 + 6.2) * 3.15;
-    tree(x, Math.round((horizon - 14 + wave) / 2) * 2 + 1);
+  // ледяной шип: столб плотного льда, сужается ступенями, слева блик
+  function iceSpike(x, base, height, width) {
+    let w = width;
+    let y = base;
+    const step = Math.max(6, Math.floor(height / (width / 2 + 1)));
+    while (w > 0 && y > base - height) {
+      const top = Math.max(base - height, y - step);
+      const left = x - Math.floor(w / 2);
+      rect("#8cc4ee", left, top, w, y - top);
+      rect("#d4ecff", left, top, Math.max(1, Math.floor(w / 3)), y - top);
+      rect("#5e96cc", left + w - 1, top, 1, y - top);
+      y = top;
+      w -= 2;
+    }
   }
-  ridge(horizon + 12, 4, "#4d6a86", 5.3, "#c9d8ea");
 
-  // передний план: трава и земля
+  // иглу: купол из снежных блоков с тёмным входом
+  function igloo(x, y) {
+    const rows = [[24, 0], [26, 3], [26, 6], [24, 9], [20, 12], [12, 15]];
+    rows.forEach(([w, dy], i) => rect(i % 2 ? "#e8f0fa" : "#d2deec", x - w / 2, y - dy - 3, w, 3));
+    rect("#1d2b44", x + 4, y - 8, 6, 8);
+    rect("#3a4d6c", x + 4, y - 8, 6, 1);
+    rect("#a9bcd4", x - 12, y - 1, 24, 1);
+  }
+
+  mountains(horizon - 6, 34, "#5a76a8", "#e2ecf7", 0.6);
+  mountains(horizon + 4, 18, "#46628f", "#cbd9ea", 2.4);
+
+  const farPlain = horizon + 6;
+  plain(farPlain, "#9fb6cf", "#e4edf7", 7);
+  for (const x of [22, 58, 96, 214, 262, 300]) tree(x, farPlain + 1);
+
+  // ледяные шипы стоят по краям, центр кадра свободен под кнопку
+  iceSpike(42, farPlain + 14, 92, 16);
+  iceSpike(64, farPlain + 14, 48, 10);
+  iceSpike(22, farPlain + 14, 34, 8);
+  iceSpike(282, farPlain + 14, 80, 14);
+  iceSpike(304, farPlain + 14, 40, 8);
+
+  const nearPlain = horizon + 14;
+  plain(nearPlain, "#c4d4e6", "#f2f7fc", 19);
+
+  // замёрзшее озеро: лёд с бликами, утоплен в ближнюю равнину
+  const lakeX = 112;
+  const lakeW = 96;
+  rect("#7fb2dc", lakeX, nearPlain + 4, lakeW, 10);
+  rect("#a9d2f2", lakeX, nearPlain + 4, lakeW, 2);
+  rect("#6a9fcd", lakeX + 4, nearPlain + 12, lakeW - 8, 2);
+  for (const [dx, dy, w] of [[10, 6, 14], [40, 8, 22], [70, 6, 10], [24, 10, 8]]) {
+    rect("#d8eeff", lakeX + dx, nearPlain + dy, w, 1);
+  }
+
+  igloo(246, nearPlain + 6);
+  tree(84, nearPlain + 4, 2);
+  tree(232, nearPlain + 2, 2);
+
+  // передний план: снежный блок травы — снег, полоска травы, земля
   const groundTop = H - 22;
   for (let y = groundTop; y < H; y++) {
     for (let x = 0; x < W; x++) {
@@ -258,14 +316,14 @@
 
     for (const c of clouds) {
       const x = ((c.x + (t / 1000) * c.speed) % (W + 60)) - 40;
-      ctx.fillStyle = "rgba(255, 214, 210, 0.5)";
+      ctx.fillStyle = "rgba(226, 238, 250, 0.45)";
       ctx.fillRect(x, c.y, c.w, 4);
       ctx.fillRect(x + 4, c.y - 3, c.w - 12, 3);
-      ctx.fillStyle = "rgba(255, 238, 230, 0.35)";
+      ctx.fillStyle = "rgba(240, 248, 255, 0.3)";
       ctx.fillRect(x + 2, c.y + 4, c.w - 6, 2);
     }
 
-    ctx.drawImage(hills, 0, 0);
+    ctx.drawImage(land, 0, 0);
 
     const sec = t / 1000;
     for (const f of flakes) {

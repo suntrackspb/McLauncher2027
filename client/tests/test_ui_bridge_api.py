@@ -329,3 +329,52 @@ def test_get_profile_reports_error_when_backend_unavailable(tmp_path, mocker):
     mocker.patch.object(api._api_client, "get_profile", side_effect=ApiError("Сервер недоступен"))
 
     assert api.get_profile() == {"ok": False, "error": "Сервер недоступен"}
+
+
+def test_play_refused_while_launch_in_progress(tmp_path, mocker):
+    api = _logged_in_api(tmp_path, mocker)
+    api._launch_busy = True
+    assert api.play() == {"ok": False, "error": "Запуск уже идёт"}
+    api._game_process = mocker.Mock()
+    assert api.play() == {"ok": False, "error": "Игра уже запущена"}
+    assert api.get_game_state() == {"busy": True, "running": True}
+
+
+def test_reinstall_refused_while_running_keeps_flag_clear(tmp_path, mocker):
+    api = _logged_in_api(tmp_path, mocker)
+    api._launch_busy = True
+    api._game_process = mocker.Mock()
+    assert api.reinstall()["ok"] is False
+    assert api._force_reinstall is False
+
+
+def test_kill_game_terminates_process(tmp_path, mocker):
+    api = _logged_in_api(tmp_path, mocker)
+    assert api.kill_game()["ok"] is False
+    process = mocker.Mock()
+    api._game_process = process
+    assert api.kill_game() == {"ok": True}
+    process.terminate.assert_called_once()
+    process.kill.assert_not_called()
+    assert api._game_killed is True
+
+
+def test_kill_game_falls_back_to_kill_on_timeout(tmp_path, mocker):
+    import subprocess
+
+    api = _logged_in_api(tmp_path, mocker)
+    process = mocker.Mock()
+    process.wait.side_effect = subprocess.TimeoutExpired("java", 5)
+    api._game_process = process
+    api.kill_game()
+    process.kill.assert_called_once()
+
+
+def test_open_game_folder_creates_and_opens(tmp_path, mocker):
+    api = _logged_in_api(tmp_path, mocker)
+    api._minecraft_directory = str(tmp_path / "mc")
+    popen = mocker.patch("ui_bridge.api.subprocess.Popen")
+    startfile = mocker.patch("ui_bridge.api.os.startfile", create=True)
+    assert api.open_game_folder() == {"ok": True}
+    assert (tmp_path / "mc").is_dir()
+    assert popen.called or startfile.called

@@ -65,10 +65,14 @@ function setProgress(fraction) {
 // Прогресс загрузки дублируется крупно на самой кнопке, пока она занята.
 let playButtonBusy = false;
 let gameInstalled = true;
+// Пока процесс игры жив, PLAY превращается в KILL (принудительное закрытие).
+let gameRunning = false;
 
 function renderPlayLabel(fraction) {
   const label = document.querySelector("#btn-play .play-label");
-  if (playButtonBusy) {
+  if (gameRunning) {
+    label.textContent = "KILL";
+  } else if (playButtonBusy) {
     label.textContent = fraction == null ? "…" : `${Math.round(fraction * 100)}%`;
   } else {
     label.textContent = gameInstalled ? "PLAY" : "INSTALL";
@@ -77,8 +81,15 @@ function renderPlayLabel(fraction) {
 
 function setPlayButtonBusy(isBusy) {
   playButtonBusy = isBusy;
-  document.getElementById("btn-play").disabled = isBusy;
+  document.getElementById("btn-play").disabled = isBusy && !gameRunning;
+  document.getElementById("btn-reinstall").disabled = isBusy || gameRunning;
   renderPlayLabel(0);
+}
+
+function setGameRunning(running) {
+  gameRunning = running;
+  document.querySelector(".play-slot").dataset.mode = running ? "kill" : gameInstalled ? "play" : "install";
+  setPlayButtonBusy(false);
 }
 
 const LOADER_NAMES = { forge: "Forge", neoforge: "NeoForge", fabric: "Fabric", quilt: "Quilt" };
@@ -103,7 +114,9 @@ async function loadProfileInfo() {
 
 async function refreshInstallState() {
   gameInstalled = await window.pywebview.api.is_installed();
-  document.querySelector(".play-slot").dataset.mode = gameInstalled ? "play" : "install";
+  if (!gameRunning) {
+    document.querySelector(".play-slot").dataset.mode = gameInstalled ? "play" : "install";
+  }
   renderPlayLabel(0);
 }
 
@@ -111,9 +124,19 @@ async function refreshInstallState() {
 
 window.onLauncherStatus = function onLauncherStatus(text) {
   setStatus(text);
-  // Финальные статусы фонового потока: игра запущена или установка упала.
-  if (text === "Запуск игры" || text.startsWith("Ошибка")) {
+  // Ошибка подготовки — фоновый поток завершился, игра не запустилась.
+  if (text.startsWith("Ошибка")) {
     setPlayButtonBusy(false);
+    refreshInstallState();
+    loadProfileInfo();
+  }
+};
+
+window.onGameState = function onGameState(running, text) {
+  setStatus(text);
+  setProgress(running ? 1 : 0);
+  setGameRunning(running);
+  if (!running) {
     refreshInstallState();
     loadProfileInfo();
   }
@@ -514,6 +537,13 @@ function initEventHandlers() {
   });
 
   document.getElementById("btn-play").addEventListener("click", async () => {
+    if (gameRunning) {
+      if (!confirm("Принудительно закрыть игру? Несохранённый прогресс может потеряться.")) return;
+      const result = await window.pywebview.api.kill_game();
+      if (!result.ok) setStatus(`Ошибка: ${result.error}`);
+      // Кнопка вернётся в PLAY через onGameState, когда процесс завершится.
+      return;
+    }
     setPlayButtonBusy(true);
     setProgress(0);
     setStatus("Подготовка…");
@@ -524,6 +554,11 @@ function initEventHandlers() {
     }
     // При успехе кнопку разблокируем по завершении/ошибке —
     // финальный статус придёт через onLauncherStatus из фонового потока.
+  });
+
+  document.getElementById("btn-folder").addEventListener("click", async () => {
+    const result = await window.pywebview.api.open_game_folder();
+    if (!result.ok) setStatus(`Ошибка: ${result.error}`);
   });
 
   document.getElementById("btn-reinstall").addEventListener("click", async () => {
@@ -547,7 +582,11 @@ async function enterMainScreen(username) {
   setStatus("Готово к запуску");
   setProgress(0);
   document.getElementById("progress-fill").style.width = "0%";
-  setPlayButtonBusy(false);
+  // Страница могла перезагрузиться, пока игра запущена — восстанавливаем состояние.
+  const state = await window.pywebview.api.get_game_state();
+  setGameRunning(state.running);
+  if (state.busy && !state.running) setPlayButtonBusy(true);
+  if (state.running) setStatus("Игра запущена");
   refreshInstallState();
   loadProfileInfo();
   loadUserHead();
