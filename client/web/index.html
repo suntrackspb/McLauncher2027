@@ -70,34 +70,42 @@
     <header class="topbar">
       <div class="brand brand-compact">
         <div class="brand-logo small">MC</div>
-        <span>Mc New Year Weekend <span class="accent">2027</span></span>
+        <span>New Year Weekend <span class="accent">2027</span></span>
         <span id="launcher-version" class="version-pill"></span>
       </div>
       <div class="topbar-actions">
-        <span id="current-username" class="username-pill"></span>
+        <span class="username-pill">
+          <canvas id="user-head" class="user-head" width="8" height="8" aria-hidden="true"></canvas>
+          <span id="current-username"></span>
+        </span>
         <button id="btn-settings" class="icon-btn" title="Настройки" aria-label="Настройки"></button>
         <button id="btn-mods" class="icon-btn" title="Опциональные моды" aria-label="Моды"></button>
         <button id="btn-skin" class="icon-btn" title="Скин и плащ" aria-label="Скин и плащ"></button>
+        <button id="btn-folder" class="icon-btn" title="Открыть папку игры" aria-label="Папка игры"></button>
         <button id="btn-reinstall" class="icon-btn" title="Переустановить" aria-label="Переустановить"></button>
         <button id="btn-logout" class="icon-btn" title="Выйти" aria-label="Выйти"></button>
       </div>
     </header>
 
     <main class="main-content">
-      <div class="play-card">
+      <div class="play-slot" data-mode="play">
         <button id="btn-play" class="play-button">
-          <span class="play-icon"></span>
-          <span class="play-label">Играть</span>
+          <span class="play-label">PLAY</span>
         </button>
-
-        <div class="progress-wrap">
-          <p id="status-text" class="status-text">Готово к запуску</p>
-          <div class="progress-bar">
-            <div id="progress-fill" class="progress-fill"></div>
-          </div>
-        </div>
+        <div class="garland" aria-hidden="true"></div>
       </div>
+      <dl id="profile-info" class="profile-info" hidden>
+        <div><dt>Сборка</dt><dd id="profile-build"></dd></div>
+        <div><dt>Сервер</dt><dd id="profile-server"></dd></div>
+      </dl>
     </main>
+
+    <footer class="ground-progress">
+      <p id="status-text" class="status-text">Готово к запуску</p>
+      <div class="progress-bar">
+        <div id="progress-fill" class="progress-fill"></div>
+      </div>
+    </footer>
   </section>
 
   <!-- Панель настроек -->

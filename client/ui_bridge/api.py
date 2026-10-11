@@ -1,4 +1,5 @@
 import base64
+import os
 import platform
 import stat
 import subprocess
@@ -6,6 +7,7 @@ import sys
 import threading
 from dataclasses import asdict, replace
 from pathlib import Path
+from urllib.parse import urlparse
 
 import requests
 import webview
@@ -14,7 +16,8 @@ from core.api_client.client import ApiClient, ApiError
 from core.debug_log import DebugLogger, debug_log_path, is_debug_flag_set
 from core.launch.options_builder import ServerProfile
 from core.launch.pipeline import prepare_and_get_launch_command
-from core.launch.profile_store import save_installed_profile, sync_install_dir
+from core.launch.servers_dat import write_server_bookmark
+from core.launch.profile_store import load_installed_profile, save_installed_profile, sync_install_dir
 from core.settings.session_store import SessionStore
 from core.settings.store import SettingsStore, get_app_data_dir
 from core.textures import TEXTURE_KINDS, check_texture
@@ -29,6 +32,28 @@ from ui_bridge.config import (
     LAUNCHER_VERSION,
 )
 from ui_bridge.reporter import WebviewProgressReporter
+
+
+def _server_address(profile: ServerProfile) -> str:
+    """Адрес для списка серверов: стандартный порт игра подставит сама."""
+    if profile.server_port == 25565:
+        return profile.server_address
+    return f"{profile.server_address}:{profile.server_port}"
+
+
+def _describe_error(exc: Exception) -> str:
+    """Сетевые ошибки requests — это многострочное полотно про пулы соединений;
+    в UI показываем, к какому серверу не достучались и что делать."""
+    if isinstance(exc, requests.ConnectionError):
+        url = getattr(exc.request, "url", None) or ""
+        server = urlparse(url).hostname or "сервером загрузки"
+        return (
+            f"нет связи с {server}. Проверьте интернет и нажмите кнопку ещё раз — "
+            "уже скачанные файлы повторно качаться не будут"
+        )
+    if isinstance(exc, requests.Timeout):
+        return "сервер загрузки не ответил вовремя. Нажмите кнопку ещё раз"
+    return str(exc)
 
 
 class LauncherApi:
@@ -49,6 +74,13 @@ class LauncherApi:
         self._api_client = ApiClient(BACKEND_URL, timeout=API_TIMEOUT_SECONDS)
         self._session_store = SessionStore(self._app_data_dir)
         self._session: dict | None = self._session_store.load()
+        # Подготовка (установка/моды) и сама игра — одна "сессия запуска":
+        # пока она идёт, повторный play/reinstall отклоняется, иначе вторая
+        # копия игры или параллельная установка в ту же папку.
+        self._launch_lock = threading.Lock()
+        self._launch_busy = False
+        self._game_process: subprocess.Popen | None = None
+        self._game_killed = False
         self._minecraft_directory = str(self._app_data_dir / "minecraft")
         self._authlib_cache_dir = str(self._app_data_dir / "authlib_cache")
         self._force_reinstall = False
@@ -260,11 +292,24 @@ class LauncherApi:
 
     # --- запуск игры -----------------------------------------------------
 
+    def get_profile(self) -> dict:
+        """Профиль сборки с бэка — показываем в UI, что именно будет
+        установлено/запущено. Ошибку сети не пробрасываем: это лишь подпись."""
+        try:
+            return {"ok": True, "profile": self._api_client.get_profile()}
+        except ApiError as exc:
+            return {"ok": False, "error": str(exc)}
+
+    def is_installed(self) -> bool:
+        """Есть ли локально установленная сборка — от этого зависит надпись
+        на главной кнопке (PLAY или INSTALL). Совпадение с профилем сервера
+        не проверяем: это сетевой запрос, а play() сам доустановит отличия."""
+        return load_installed_profile(self._app_data_dir) is not None
+
     def play(self) -> dict:
         if not self._session:
             return {"ok": False, "error": "Сначала войдите в аккаунт"}
-        threading.Thread(target=self._play_thread, daemon=True).start()
-        return {"ok": True}
+        return self._start_launch()
 
     def reinstall(self) -> dict:
         """Принудительный снос и переустановка minecraft-директории (кнопка
@@ -273,8 +318,60 @@ class LauncherApi:
         if not self._session:
             return {"ok": False, "error": "Сначала войдите в аккаунт"}
         self._force_reinstall = True
-        threading.Thread(target=self._play_thread, daemon=True).start()
+        result = self._start_launch()
+        if not result["ok"]:
+            self._force_reinstall = False
+        return result
+
+    def get_game_state(self) -> dict:
+        """Для фронта после перезагрузки страницы — идёт ли сейчас
+        подготовка (busy) и запущена ли игра (running)."""
+        return {"busy": self._launch_busy, "running": self._game_process is not None}
+
+    def kill_game(self) -> dict:
+        """Принудительно закрыть игру: сначала terminate (SIGTERM, игра
+        успевает сохранить настройки), через 5 с — kill."""
+        process = self._game_process
+        if process is None:
+            return {"ok": False, "error": "Игра не запущена"}
+        self._game_killed = True
+        process.terminate()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
         return {"ok": True}
+
+    def open_game_folder(self) -> dict:
+        """Открывает папку установки Minecraft в Finder/Проводнике."""
+        folder = Path(self._minecraft_directory)
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+            if sys.platform == "win32":
+                os.startfile(folder)  # noqa: S606 — своя папка, не пользовательский ввод
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", str(folder)])
+            else:
+                subprocess.Popen(["xdg-open", str(folder)])
+        except OSError as exc:
+            return {"ok": False, "error": f"Не удалось открыть папку: {exc}"}
+        return {"ok": True}
+
+    def _start_launch(self) -> dict:
+        with self._launch_lock:
+            if self._launch_busy:
+                running = self._game_process is not None
+                return {"ok": False, "error": "Игра уже запущена" if running else "Запуск уже идёт"}
+            self._launch_busy = True
+        threading.Thread(target=self._launch_thread, daemon=True).start()
+        return {"ok": True}
+
+    def _launch_thread(self) -> None:
+        try:
+            self._play_thread()
+        finally:
+            self._game_process = None
+            self._launch_busy = False
 
     def _play_thread(self) -> None:
         reporter = WebviewProgressReporter(self._window) if self._window else None
@@ -321,13 +418,43 @@ class LauncherApi:
                 already_installed=not wiped,
             )
             save_installed_profile(self._app_data_dir, profile)
+            try:
+                write_server_bookmark(
+                    Path(self._minecraft_directory), APP_NAME, _server_address(profile)
+                )
+            except OSError as exc:
+                # Без закладки игра всё равно зайдёт на сервер через quickPlay.
+                debug_logger.log(f"Не удалось записать servers.dat: {exc!r}")
         except Exception as exc:  # noqa: BLE001 — репортим в UI любую причину провала
             debug_logger.log(f"ОШИБКА: {exc!r}")
             if reporter:
-                reporter.status(f"Ошибка: {exc}")
+                reporter.status(f"Ошибка: {_describe_error(exc)}")
             return
 
         debug_logger.log("Запуск процесса игры…")
         if reporter:
             reporter.status("Запуск игры")
-        subprocess.Popen(command, cwd=self._minecraft_directory)
+        self._game_killed = False
+        try:
+            self._game_process = subprocess.Popen(command, cwd=self._minecraft_directory)
+        except OSError as exc:
+            debug_logger.log(f"ОШИБКА запуска процесса: {exc!r}")
+            if reporter:
+                reporter.status(f"Ошибка: не удалось запустить игру: {exc}")
+            return
+        if reporter:
+            reporter.game_state(True, "Игра запущена")
+
+        # Поток и так фоновый — просто ждём выхода игры, чтобы UI вернул
+        # кнопку PLAY и показал, как она завершилась.
+        code = self._game_process.wait()
+        debug_logger.log(f"Игра завершилась, код {code}, killed={self._game_killed}")
+        if self._game_killed:
+            message = "Игра остановлена"
+        elif code == 0:
+            message = "Игра закрыта"
+        else:
+            message = f"Игра завершилась с ошибкой (код {code})"
+        self._game_process = None
+        if reporter:
+            reporter.game_state(False, message)

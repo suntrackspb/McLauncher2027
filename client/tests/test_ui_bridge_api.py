@@ -285,3 +285,96 @@ def test_delete_texture_expired_session(tmp_path, mocker):
 
     assert result["ok"] is False
     assert "войдите снова" in result["error"]
+
+
+def test_is_installed_false_without_marker(tmp_path, mocker):
+    api = _api_with_tmp_settings(tmp_path, mocker)
+    assert api.is_installed() is False
+
+
+def test_is_installed_true_after_profile_saved(tmp_path, mocker):
+    from core.launch.options_builder import ServerProfile
+    from core.launch.profile_store import save_installed_profile
+
+    api = _api_with_tmp_settings(tmp_path, mocker)
+    save_installed_profile(
+        tmp_path,
+        ServerProfile(mc_version="1.20.1", loader="vanilla", loader_version=None, server_address="127.0.0.1", server_port=25565),
+    )
+    assert api.is_installed() is True
+
+
+def test_describe_error_names_unreachable_host():
+    import requests
+
+    from ui_bridge.api import _describe_error
+
+    request = requests.Request("GET", "https://resources.download.minecraft.net/99/99ce").prepare()
+    message = _describe_error(requests.ConnectionError("boom", request=request))
+
+    assert "resources.download.minecraft.net" in message
+    assert "HTTPSConnectionPool" not in message
+
+
+def test_get_profile_wraps_backend_profile(tmp_path, mocker):
+    api = _api_with_tmp_settings(tmp_path, mocker)
+    profile = {"mc_version": "1.20.1", "loader": "forge", "loader_version": "47.2.0", "server_address": "mc.example.ru", "server_port": 25565}
+    mocker.patch.object(api._api_client, "get_profile", return_value=profile)
+
+    assert api.get_profile() == {"ok": True, "profile": profile}
+
+
+def test_get_profile_reports_error_when_backend_unavailable(tmp_path, mocker):
+    api = _api_with_tmp_settings(tmp_path, mocker)
+    mocker.patch.object(api._api_client, "get_profile", side_effect=ApiError("Сервер недоступен"))
+
+    assert api.get_profile() == {"ok": False, "error": "Сервер недоступен"}
+
+
+def test_play_refused_while_launch_in_progress(tmp_path, mocker):
+    api = _logged_in_api(tmp_path, mocker)
+    api._launch_busy = True
+    assert api.play() == {"ok": False, "error": "Запуск уже идёт"}
+    api._game_process = mocker.Mock()
+    assert api.play() == {"ok": False, "error": "Игра уже запущена"}
+    assert api.get_game_state() == {"busy": True, "running": True}
+
+
+def test_reinstall_refused_while_running_keeps_flag_clear(tmp_path, mocker):
+    api = _logged_in_api(tmp_path, mocker)
+    api._launch_busy = True
+    api._game_process = mocker.Mock()
+    assert api.reinstall()["ok"] is False
+    assert api._force_reinstall is False
+
+
+def test_kill_game_terminates_process(tmp_path, mocker):
+    api = _logged_in_api(tmp_path, mocker)
+    assert api.kill_game()["ok"] is False
+    process = mocker.Mock()
+    api._game_process = process
+    assert api.kill_game() == {"ok": True}
+    process.terminate.assert_called_once()
+    process.kill.assert_not_called()
+    assert api._game_killed is True
+
+
+def test_kill_game_falls_back_to_kill_on_timeout(tmp_path, mocker):
+    import subprocess
+
+    api = _logged_in_api(tmp_path, mocker)
+    process = mocker.Mock()
+    process.wait.side_effect = subprocess.TimeoutExpired("java", 5)
+    api._game_process = process
+    api.kill_game()
+    process.kill.assert_called_once()
+
+
+def test_open_game_folder_creates_and_opens(tmp_path, mocker):
+    api = _logged_in_api(tmp_path, mocker)
+    api._minecraft_directory = str(tmp_path / "mc")
+    popen = mocker.patch("ui_bridge.api.subprocess.Popen")
+    startfile = mocker.patch("ui_bridge.api.os.startfile", create=True)
+    assert api.open_game_folder() == {"ok": True}
+    assert (tmp_path / "mc").is_dir()
+    assert popen.called or startfile.called

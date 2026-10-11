@@ -10,21 +10,46 @@ class ProgressReporter(Protocol):
     def progress(self, current: int, maximum: int) -> None: ...
 
 
+# Этапы, которые minecraft-launcher-lib объявляет через setStatus, — по-русски.
+STAGE_NAMES = {
+    "Download Libraries": "Загрузка библиотек",
+    "Download Assets": "Загрузка ресурсов игры",
+    "Install java runtime": "Установка Java",
+    "Installation complete": "Установка завершена",
+}
+
+
 def to_callback_dict(reporter: ProgressReporter | None) -> dict:
-    """Адаптер ProgressReporter -> CallbackDict, который ждёт minecraft-launcher-lib."""
+    """Адаптер ProgressReporter -> CallbackDict, который ждёт minecraft-launcher-lib.
+
+    Библиотека зовёт setStatus("Download <файл>") на каждый файл из рабочих
+    потоков — это тысячи синхронных evaluate_js, которые забивают WebView и
+    не дают дойти прогрессу. Поэтому пофайловые статусы глушим, а прогресс
+    отдаём только при смене целого процента."""
     if reporter is None:
         return {}
 
-    state = {"max": 0}
+    state = {"max": 0, "percent": -1}
 
     def set_max(value: int) -> None:
         state["max"] = value
+        state["percent"] = -1
 
     def set_progress(value: int) -> None:
-        reporter.progress(value, state["max"])
+        maximum = state["max"]
+        if maximum <= 0:
+            reporter.progress(value, maximum)
+            return
+        percent = min(100, value * 100 // maximum)
+        if percent != state["percent"]:
+            state["percent"] = percent
+            reporter.progress(value, maximum)
 
     def set_status(value: str) -> None:
-        reporter.status(value)
+        if value in STAGE_NAMES:
+            reporter.status(STAGE_NAMES[value])
+        elif not value.startswith("Download "):
+            reporter.status(value)
 
     return {"setStatus": set_status, "setProgress": set_progress, "setMax": set_max}
 
