@@ -1,6 +1,7 @@
 import hmac
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from pydantic import BaseModel
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,7 +11,7 @@ from app.models.mod import ModType
 from app.schemas.admin import AdminLoginRequest, AdminLoginResponse, ServerProfileUpdate
 from app.schemas.launcher import ServerProfileOut
 from app.schemas.mod import ModOut, ModUpdate
-from app.services import mod_service, profile_service
+from app.services import mod_service, modrinth_service, profile_service
 from app.services.errors import ServiceError
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -85,6 +86,36 @@ async def delete_mod(mod_id: int, db: AsyncSession = Depends(get_db)):
         await mod_service.delete_mod(db, mod_id)
     except ServiceError as exc:
         raise HTTPException(status_code=404, detail=exc.message) from exc
+
+
+class ModrinthInstallRequest(BaseModel):
+    project_id: str
+    mod_type: ModType = ModType.required
+
+
+def _modrinth_error(exc: ServiceError) -> HTTPException:
+    status = {"NotFound": 404, "MODRINTH": 502, "NO_PROFILE": 409}.get(exc.error_code, 400)
+    return HTTPException(status_code=status, detail=exc.message)
+
+
+@router.get("/modrinth/search", dependencies=[Depends(require_admin)])
+async def modrinth_search(q: str = Query("", max_length=100), db: AsyncSession = Depends(get_db)):
+    try:
+        return await modrinth_service.search(db, q)
+    except ServiceError as exc:
+        raise _modrinth_error(exc) from exc
+
+
+@router.post("/modrinth/install", dependencies=[Depends(require_admin)])
+async def modrinth_install(payload: ModrinthInstallRequest, db: AsyncSession = Depends(get_db)):
+    try:
+        result = await modrinth_service.install(db, payload.project_id, payload.mod_type)
+    except ServiceError as exc:
+        raise _modrinth_error(exc) from exc
+    return {
+        "installed": [ModOut.model_validate(m) for m in result["installed"]],
+        "skipped": result["skipped"],
+    }
 
 
 @router.get("/profile", response_model=ServerProfileOut, dependencies=[Depends(require_admin)])

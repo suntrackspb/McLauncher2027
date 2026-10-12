@@ -48,7 +48,10 @@
         <section class="page" data-page="mods" hidden>
           <div class="page-head">
             <h1>Моды</h1>
-            <button class="btn btn-primary" id="btn-add-mods" type="button">Добавить моды</button>
+            <div class="head-actions">
+              <button class="btn" id="btn-modrinth" type="button">Найти на Modrinth</button>
+              <button class="btn btn-primary" id="btn-add-mods" type="button">Загрузить файлы</button>
+            </div>
           </div>
 
           <div class="toolbar">
@@ -139,6 +142,24 @@
   </dialog>
 
   <!-- Редактирование -->
+  <dialog id="dlg-modrinth" class="dialog dialog-wide">
+    <form method="dialog" class="dialog-head">
+      <h2>Моды с Modrinth</h2>
+      <button class="btn btn-ghost" value="close" aria-label="Закрыть">Закрыть</button>
+    </form>
+    <p class="muted small" id="mr-profile"></p>
+    <form id="mr-form" class="mr-search">
+      <input type="search" id="mr-query" placeholder="Название мода, например JEI" aria-label="Поиск на Modrinth" />
+      <div class="segmented" id="mr-type" role="group" aria-label="Тип добавляемых модов">
+        <button type="button" data-type="required" aria-pressed="true">Обязательный</button>
+        <button type="button" data-type="optional" aria-pressed="false">Необязательный</button>
+      </div>
+      <button class="btn btn-primary" type="submit">Найти</button>
+    </form>
+    <ul class="queue mr-results" id="mr-results"></ul>
+    <p class="muted small">Показаны только моды с версией под текущий профиль. Обязательные зависимости добавятся сами. Не нашли — загрузите jar вручную.</p>
+  </dialog>
+
   <dialog id="dlg-edit" class="dialog">
     <form id="edit-form" class="edit-form" novalidate>
       <div class="dialog-head">

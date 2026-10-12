@@ -240,6 +240,78 @@ function modRow(mod) {
   );
 }
 
+// --- Modrinth ---------------------------------------------------------------
+
+let mrType = "required";
+
+function openModrinth() {
+  const p = state.profile;
+  $("mr-profile").textContent = p
+    ? `Поиск под профиль: ${p.loader} ${p.mc_version}`
+    : "Сначала задайте профиль сервера — моды ищутся под его загрузчик и версию.";
+  $("mr-results").replaceChildren();
+  $("dlg-modrinth").showModal();
+  $("mr-query").focus();
+}
+
+function syncMrType() {
+  for (const b of $("mr-type").querySelectorAll("button")) b.setAttribute("aria-pressed", String(b.dataset.type === mrType));
+}
+
+function formatDownloads(n) {
+  if (n >= 1e6) return `${(n / 1e6).toFixed(1)} млн`;
+  if (n >= 1e3) return `${Math.round(n / 1e3)} тыс.`;
+  return String(n);
+}
+
+const SIDE_LABEL = { required: "нужен", optional: "по желанию", unsupported: "не нужен" };
+
+async function searchModrinth(event) {
+  event.preventDefault();
+  const root = $("mr-results");
+  root.replaceChildren(el("li", { class: "muted", text: "Ищу…" }));
+  try {
+    const hits = await api(`/admin/modrinth/search?q=${encodeURIComponent($("mr-query").value.trim())}`);
+    root.replaceChildren(...(hits.length ? hits.map(modrinthRow) : [el("li", { class: "muted", text: "Ничего не найдено под этот профиль" })]));
+  } catch (err) {
+    root.replaceChildren(el("li", { class: "error-text", text: err.message }));
+  }
+}
+
+function modrinthRow(hit) {
+  const installedNames = new Set(state.mods.filter(matchesProfile).map((m) => m.name));
+  const already = installedNames.has(hit.title);
+  const btn = el("button", { class: "btn btn-sm btn-primary", type: "button", text: already ? "Уже добавлен" : "Добавить" });
+  if (already) btn.disabled = true;
+  btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    btn.textContent = "Скачиваю…";
+    try {
+      const res = await api("/admin/modrinth/install", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project_id: hit.project_id, mod_type: mrType }),
+      });
+      const names = res.installed.map((m) => m.name);
+      btn.textContent = "Добавлен";
+      toast(names.length ? `Добавлено: ${names.join(", ")}` : `Уже есть: ${res.skipped.join(", ")}`);
+      await refreshAll();
+    } catch (err) {
+      btn.disabled = false;
+      btn.textContent = "Добавить";
+      toast(err.message, true);
+    }
+  });
+  const sides = [`клиент: ${SIDE_LABEL[hit.client_side] || "?"}`, `сервер: ${SIDE_LABEL[hit.server_side] || "?"}`];
+  return el("li", {},
+    hit.icon_url ? el("img", { src: hit.icon_url, alt: "", loading: "lazy" }) : el("div", { class: "mr-noicon" }),
+    el("div", {}, el("div", { class: "mr-title", text: hit.title }),
+      el("div", { class: "mr-meta", text: `${formatDownloads(hit.downloads)} загрузок · ${sides.join(" · ")}` })),
+    btn,
+    hit.description ? el("div", { class: "mr-desc", text: hit.description }) : null,
+  );
+}
+
 // --- удаление мода ---------------------------------------------------------
 
 function askDelete(mod) {
@@ -567,6 +639,14 @@ function init() {
 
   // моды
   $("btn-add-mods").addEventListener("click", openAddDialog);
+  $("btn-modrinth").addEventListener("click", openModrinth);
+  $("mr-form").addEventListener("submit", searchModrinth);
+  $("mr-type").addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-type]");
+    if (!btn) return;
+    mrType = btn.dataset.type;
+    syncMrType();
+  });
   $("mods-search").addEventListener("input", renderMods);
   $("mods-all-versions").addEventListener("change", renderMods);
 
