@@ -101,6 +101,8 @@ async function refreshAll() {
   await Promise.all([loadProfile(), loadMods(), loadExtras(), loadConnection()]);
   renderAll();
   fillConnForm();
+  controlLoaded = false;
+  if (location.hash.startsWith("#/control")) enterControl();
 }
 
 // --- подключение к серверу и синхронизация ------------------------------------
@@ -118,6 +120,7 @@ function fillConnForm() {
   $("conn-port").value = c?.port ?? "";
   $("conn-username").value = c?.username ?? "";
   $("conn-server_dir").value = c?.server_dir ?? "";
+  $("conn-service_name").value = c?.service_name ?? "";
   $("conn-password").value = "";
   $("conn-key").value = "";
   const saved = [c?.has_password && "пароль", c?.has_private_key && "SSH-ключ"].filter(Boolean);
@@ -135,6 +138,7 @@ function fillConnForm() {
 function onConnProtocol() {
   const proto = $("conn-protocol").value;
   $("field-conn-key").hidden = proto !== "sftp";
+  $("field-conn-service").hidden = proto !== "sftp";
   $("conn-port").placeholder = String(DEFAULT_PORTS[proto]);
 }
 
@@ -147,6 +151,7 @@ async function saveConnection(event, { resetHostKey = false } = {}) {
     port: Number($("conn-port").value) || null,
     username: $("conn-username").value.trim(),
     server_dir: $("conn-server_dir").value.trim(),
+    service_name: proto === "sftp" ? ($("conn-service_name").value.trim() || null) : null,
     // пустое поле = не менять сохранённое
     password: $("conn-password").value || null,
     private_key: proto === "sftp" ? ($("conn-key").value.trim() || null) : null,
@@ -448,6 +453,119 @@ function modrinthRow(hit) {
   );
 }
 
+// --- управление сервером ------------------------------------------------------
+
+const STATE_LABEL = {
+  active: "Работает", inactive: "Остановлен", failed: "Упал", activating: "Запускается",
+  deactivating: "Останавливается", unknown: "Неизвестно",
+};
+let logTimer = null;
+let controlLoaded = false;
+
+async function enterControl() {
+  if (!state.connection) {
+    $("ctl-hint").textContent = "Сначала настройте подключение к серверу в разделе «Сервер».";
+    return;
+  }
+  $("ctl-hint").textContent = "Статус, лог и консоль игрового сервера.";
+  if (!controlLoaded) {
+    controlLoaded = true;
+    await Promise.all([loadStatus(), loadLog()]);
+  }
+  syncLogFollow();
+}
+
+function leaveControl() {
+  clearInterval(logTimer);
+  logTimer = null;
+}
+
+async function loadStatus() {
+  const stateEl = $("ctl-state");
+  try {
+    const s = await api("/admin/server/status");
+    const st = s.service_state;
+    stateEl.textContent = st ? (STATE_LABEL[st] || st) : (s.players != null ? "Работает" : "—");
+    stateEl.className = `ctl-state ${st || (s.players != null ? "active" : "")}`;
+    $("ctl-players").textContent = s.players || s.rcon_error || (st ? "" : "Статус запуска виден только по SSH; без него — через панель хостера.");
+    $("ctl-actions").hidden = !s.can_control;
+    $("rcon-off").hidden = s.rcon_enabled;
+    $("rcon-on").hidden = !s.rcon_enabled;
+  } catch (err) {
+    stateEl.textContent = "Нет связи";
+    stateEl.className = "ctl-state failed";
+    $("ctl-players").textContent = err.message;
+  }
+}
+
+async function loadLog() {
+  const out = $("log-output");
+  try {
+    const r = await api("/admin/server/log?lines=300");
+    const atBottom = out.scrollHeight - out.scrollTop - out.clientHeight < 30;
+    out.textContent = r.missing ? "logs/latest.log пока нет — сервер ещё не запускался." : r.lines.join("\n");
+    if (atBottom || !out.dataset.loaded) out.scrollTop = out.scrollHeight;
+    out.dataset.loaded = "1";
+  } catch (err) {
+    out.textContent = err.message;
+  }
+}
+
+function syncLogFollow() {
+  clearInterval(logTimer);
+  logTimer = $("log-follow").checked ? setInterval(loadLog, 3000) : null;
+}
+
+async function serverAction(action) {
+  const labels = { start: "Запустить", restart: "Перезапустить", stop: "Остановить" };
+  if (action !== "start" && !confirm(`${labels[action]} сервер? Игроков на нём выкинет.`)) return;
+  const buttons = $("ctl-actions").querySelectorAll("button");
+  buttons.forEach((b) => { b.disabled = true; });
+  $("ctl-state").textContent = "…";
+  try {
+    await api(`/admin/server/control/${action}`, { method: "POST" });
+    toast(`${labels[action]}: готово`);
+  } catch (err) {
+    toast(err.message, true);
+  } finally {
+    buttons.forEach((b) => { b.disabled = false; });
+    await loadStatus();
+    setTimeout(loadLog, 1500);
+  }
+}
+
+async function sendRcon(event) {
+  event.preventDefault();
+  const input = $("rcon-input");
+  const cmd = input.value.trim().replace(/^\//, "");
+  if (!cmd) return;
+  const out = $("rcon-output");
+  const append = (text) => {
+    out.textContent += (out.textContent ? "\n" : "") + text;
+    out.scrollTop = out.scrollHeight;
+  };
+  append(`> ${cmd}`);
+  input.value = "";
+  try {
+    const r = await api("/admin/server/rcon", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ command: cmd }),
+    });
+    // Minecraft красит ответы §-кодами — в браузере они лишние.
+    append(r.output.replace(/§./g, "") || "(пусто)");
+  } catch (err) {
+    append(`! ${err.message}`);
+  }
+}
+
+async function enableRcon() {
+  try {
+    await api("/admin/server/rcon/enable", { method: "POST" });
+    toast("RCON включён в server.properties. Перезапустите сервер.");
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+
 // --- удаление мода ---------------------------------------------------------
 
 function askDelete(mod) {
@@ -731,12 +849,14 @@ async function saveProfile(event) {
 
 function route() {
   const name = (location.hash.match(/^#\/(\w+)/) || [])[1];
-  const page = ["overview", "mods", "server"].includes(name) ? name : "overview";
+  const page = ["overview", "mods", "server", "control"].includes(name) ? name : "overview";
   for (const section of document.querySelectorAll(".page")) section.hidden = section.dataset.page !== page;
   for (const link of document.querySelectorAll("#nav a")) {
     if (link.dataset.route === page) link.setAttribute("aria-current", "page");
     else link.removeAttribute("aria-current");
   }
+  if (page === "control") enterControl();
+  else leaveControl();
 }
 
 async function enterMain() {
@@ -832,6 +952,16 @@ function init() {
   $("conn-reset-key").addEventListener("click", () => saveConnection(null, { resetHostKey: true }));
   $("sync-plan").addEventListener("click", () => runSync(false));
   $("sync-apply").addEventListener("click", () => runSync(true));
+
+  $("ctl-refresh").addEventListener("click", () => { loadStatus(); loadLog(); });
+  $("ctl-actions").addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-action]");
+    if (btn) serverAction(btn.dataset.action);
+  });
+  $("log-follow").addEventListener("change", syncLogFollow);
+  $("log-refresh").addEventListener("click", loadLog);
+  $("rcon-form").addEventListener("submit", sendRcon);
+  $("rcon-enable").addEventListener("click", enableRcon);
 
   if (getToken()) enterMain();
   else showScreen("login");

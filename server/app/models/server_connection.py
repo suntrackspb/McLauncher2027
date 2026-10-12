@@ -28,6 +28,9 @@ class ServerConnection(Base):
     host_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Корень сервера: там лежат mods/, libraries/, server.properties.
     server_dir: Mapped[str] = mapped_column(String(512))
+    # systemd-юнит сервера (только для SFTP/SSH) — для старт/стоп/рестарт.
+    # Пользователю нужен sudo без пароля ровно на systemctl этого юнита.
+    service_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

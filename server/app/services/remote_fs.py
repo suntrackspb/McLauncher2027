@@ -64,6 +64,11 @@ class RemoteFS:
     def mkdirs(self, path: str) -> None:
         raise NotImplementedError
 
+    def read_tail(self, path: str, max_bytes: int) -> bytes:
+        """Последние max_bytes файла (лог может быть большим)."""
+        data = self.read(path)
+        return data[-max_bytes:]
+
     def exists(self, path: str) -> bool:
         parent, name = posixpath.split(path)
         try:
@@ -241,8 +246,23 @@ class SftpFS(RemoteFS):
         self._call(self._sftp.getfo, self._abs(path), buf)
         return buf.getvalue()
 
+    def read_tail(self, path: str, max_bytes: int) -> bytes:
+        full = self._abs(path)
+        size = self._call(self._sftp.stat, full).st_size or 0
+        with self._call(self._sftp.open, full, "rb") as fh:
+            fh.seek(max(0, size - max_bytes))
+            return fh.read()
+
     def write(self, path: str, content: bytes) -> None:
-        self._call(self._sftp.putfo, io.BytesIO(content), self._abs(path))
+        full = self._abs(path)
+        self._call(self._sftp.putfo, io.BytesIO(content), full)
+        # Под root новые файлы получили бы владельца root — отдаём их
+        # владельцу папки (тому, от кого работает сервер).
+        try:
+            parent = self._sftp.stat(posixpath.dirname(full))
+            self._sftp.chown(full, parent.st_uid, parent.st_gid)
+        except (OSError, paramiko.SSHException):
+            pass  # не root — chown не нужен и не разрешён
 
     def rename(self, src: str, dst: str) -> None:
         self._call(self._sftp.posix_rename, self._abs(src), self._abs(dst))
@@ -257,6 +277,16 @@ class SftpFS(RemoteFS):
                 self._sftp.stat(self._abs(current))
             except FileNotFoundError:
                 self._call(self._sftp.mkdir, self._abs(current))
+
+    def run(self, cmd: str, timeout: int = 60) -> tuple[int, str]:
+        """Выполняет команду по SSH, возвращает (код, stdout+stderr)."""
+        try:
+            _, stdout, stderr = self._client.exec_command(cmd, timeout=timeout)
+            out = stdout.read().decode("utf-8", errors="replace")
+            err = stderr.read().decode("utf-8", errors="replace")
+            return stdout.channel.recv_exit_status(), (out + err).strip()
+        except (OSError, paramiko.SSHException) as exc:
+            raise RemoteError(f"SSH: {exc}") from exc
 
     def close(self) -> None:
         self._client.close()

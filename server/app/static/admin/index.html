@@ -29,6 +29,7 @@
         <a href="#/overview" data-route="overview">Обзор</a>
         <a href="#/mods" data-route="mods">Моды <span class="count" id="nav-mods-count"></span></a>
         <a href="#/server" data-route="server">Сервер</a>
+        <a href="#/control" data-route="control">Управление</a>
       </nav>
       <button id="btn-logout" class="btn btn-ghost sidebar-foot" type="button">Выйти</button>
     </aside>
@@ -129,6 +130,9 @@
             <label class="field full" id="field-conn-key">Приватный SSH-ключ (вместо пароля)
               <textarea id="conn-key" rows="3" class="mono" spellcheck="false" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"></textarea>
             </label>
+            <label class="field full" id="field-conn-service">systemd-сервис сервера (для старт/стоп/рестарт)
+              <input type="text" id="conn-service_name" class="mono" placeholder="mc-forge" />
+            </label>
             <label class="field full">Папка сервера (там, где mods/ и server.properties)
               <input type="text" id="conn-server_dir" required class="mono" placeholder="/opt/minecraft/forge" />
             </label>
@@ -149,6 +153,52 @@
               <button type="button" class="btn btn-primary" id="sync-apply" disabled>Применить</button>
             </div>
             <div id="sync-report" class="sync-report"></div>
+          </div>
+        </section>
+
+        <!-- Управление -->
+        <section class="page" data-page="control" hidden>
+          <div class="page-head">
+            <h1>Управление</h1>
+            <button class="btn btn-ghost" id="ctl-refresh" type="button">Обновить</button>
+          </div>
+          <p class="muted lead" id="ctl-hint">Статус, лог и консоль игрового сервера.</p>
+
+          <div class="panel ctl-status">
+            <div>
+              <div class="muted small">Сервер</div>
+              <div class="ctl-state" id="ctl-state">—</div>
+              <div class="muted small" id="ctl-players"></div>
+            </div>
+            <div class="form-actions" id="ctl-actions" hidden>
+              <button type="button" class="btn" data-action="start">Старт</button>
+              <button type="button" class="btn" data-action="restart">Рестарт</button>
+              <button type="button" class="btn btn-danger" data-action="stop">Стоп</button>
+            </div>
+          </div>
+
+          <h2 class="section-title">Консоль (RCON)</h2>
+          <div class="panel">
+            <div id="rcon-off" hidden>
+              <p class="muted small">RCON выключен в server.properties. Включу его со случайным паролем — понадобится перезапуск сервера.</p>
+              <button type="button" class="btn" id="rcon-enable">Включить RCON</button>
+            </div>
+            <div id="rcon-on" hidden>
+              <pre class="console" id="rcon-output" aria-live="polite"></pre>
+              <form id="rcon-form" class="mr-search">
+                <input type="search" id="rcon-input" class="mono" placeholder="list, say Привет, op Ник, time set day" autocomplete="off" aria-label="Команда сервера" />
+                <button class="btn btn-primary" type="submit">Отправить</button>
+              </form>
+            </div>
+          </div>
+
+          <h2 class="section-title">Лог сервера</h2>
+          <div class="panel">
+            <div class="toolbar">
+              <label class="switch"><input type="checkbox" id="log-follow" /> <span>Обновлять каждые 3 с</span></label>
+              <button type="button" class="btn btn-sm" id="log-refresh">Обновить лог</button>
+            </div>
+            <pre class="console console-log" id="log-output"></pre>
           </div>
         </section>
       </main>

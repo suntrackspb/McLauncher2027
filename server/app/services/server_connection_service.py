@@ -27,6 +27,7 @@ async def save(
     password: str | None,
     private_key: str | None,
     server_dir: str,
+    service_name: str | None = None,
     reset_host_key: bool = False,
 ) -> ServerConnection:
     """password/private_key: None — оставить сохранённый, "" — стереть."""
@@ -42,6 +43,7 @@ async def save(
     conn.port = port
     conn.username = username
     conn.server_dir = server_dir.rstrip("/") or "/"
+    conn.service_name = ((service_name or "").strip() or None) if protocol == "sftp" else None
     if password is not None:
         conn.password_enc = secret_box.encrypt(password)
     if private_key is not None:

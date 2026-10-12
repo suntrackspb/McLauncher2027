@@ -123,3 +123,94 @@ async def test_sync_plan_then_apply(client, ftp_server, ftp_root):
 async def test_sync_without_connection_is_409(client):
     headers = await _admin(client)
     assert (await client.get("/api/v1/admin/server/sync", headers=headers)).status_code == 409
+
+
+# --- этап 2: управление, лог, RCON -------------------------------------------
+
+import socket
+import struct
+
+from app.services import server_control_service
+
+
+def test_set_properties_keeps_comments_and_order():
+    text = "#Minecraft\nmotd=hi\nenable-rcon=false\n"
+    out = server_control_service.set_properties(text, {"enable-rcon": "true", "rcon.port": "25575"})
+    assert out == "#Minecraft\nmotd=hi\nenable-rcon=true\nrcon.port=25575\n"
+    assert server_control_service.parse_properties(out)["enable-rcon"] == "true"
+
+
+@pytest.fixture
+def rcon_server():
+    """Фейковый RCON: пароль "secret", на любую команду отвечает "ok: <cmd>"."""
+    srv = socket.socket()
+    srv.bind(("127.0.0.1", 0))
+    srv.listen()
+
+    def recv(conn):
+        (n,) = struct.unpack("<i", conn.recv(4))
+        data = b""
+        while len(data) < n:
+            data += conn.recv(n - len(data))
+        rid, kind = struct.unpack("<ii", data[:8])
+        return rid, data[8:-2].decode()
+
+    def send(conn, rid, body):
+        payload = struct.pack("<ii", rid, 0) + body.encode() + b"\x00\x00"
+        conn.sendall(struct.pack("<i", len(payload)) + payload)
+
+    def serve():
+        while True:
+            try:
+                conn, _ = srv.accept()
+            except OSError:
+                return
+            with conn:
+                rid, pwd = recv(conn)
+                send(conn, rid if pwd == "secret" else -1, "")
+                if pwd != "secret":
+                    continue
+                rid, cmd = recv(conn)
+                send(conn, rid, f"ok: {cmd}")
+
+    threading.Thread(target=serve, daemon=True).start()
+    yield srv.getsockname()[1]
+    srv.close()
+
+
+async def test_ftp_status_log_and_rcon(client, ftp_server, ftp_root, rcon_server):
+    headers = await _admin(client)
+    await client.put("/api/v1/admin/profile", headers=headers, json={
+        "mc_version": "1.21", "loader": "forge", "loader_version": "51.0.33",
+        "server_address": "127.0.0.1", "server_port": 25565})
+    # service_name для FTP игнорируется — управлять запуском по FTP нельзя
+    resp = await _connect(client, headers, ftp_server, service_name="mc-forge")
+    assert resp.json()["service_name"] is None
+    (ftp_root / "server.properties").write_text(f"#c\nenable-rcon=false\nrcon.port={rcon_server}\n")
+    (ftp_root / "logs").mkdir()
+    (ftp_root / "logs" / "latest.log").write_text("\n".join(f"line {i}" for i in range(50)))
+
+    status = (await client.get("/api/v1/admin/server/status", headers=headers)).json()
+    assert status["can_control"] is False and status["service_state"] is None
+    assert status["rcon_enabled"] is False
+
+    log = (await client.get("/api/v1/admin/server/log", params={"lines": 3}, headers=headers)).json()
+    assert log["lines"] == ["line 47", "line 48", "line 49"]
+
+    assert (await client.post("/api/v1/admin/server/control/restart", headers=headers)).status_code == 409
+    assert (await client.post("/api/v1/admin/server/rcon", headers=headers, json={"command": "list"})).status_code == 409
+
+    assert (await client.post("/api/v1/admin/server/rcon/enable", headers=headers)).json()["needs_restart"] is True
+    props = server_control_service.parse_properties((ftp_root / "server.properties").read_text())
+    assert props["enable-rcon"] == "true" and props["rcon.port"] == str(rcon_server) and props["rcon.password"]
+
+    # подставляем пароль, который знает фейковый RCON
+    (ftp_root / "server.properties").write_text(f"enable-rcon=true\nrcon.port={rcon_server}\nrcon.password=secret\n")
+    out = await client.post("/api/v1/admin/server/rcon", headers=headers, json={"command": "say hi"})
+    assert out.json() == {"output": "ok: say hi"}
+    status = (await client.get("/api/v1/admin/server/status", headers=headers)).json()
+    assert status["rcon_enabled"] is True and status["players"] == "ok: list"
+
+    (ftp_root / "server.properties").write_text(f"enable-rcon=true\nrcon.port={rcon_server}\nrcon.password=bad\n")
+    bad = await client.post("/api/v1/admin/server/rcon", headers=headers, json={"command": "list"})
+    assert bad.status_code == 502 and "пароль" in bad.json()["detail"]
