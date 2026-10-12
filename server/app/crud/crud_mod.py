@@ -39,6 +39,7 @@ async def create(
     mod_type: ModType,
     loader: str,
     mc_version: str,
+    server_side: bool = True,
 ) -> Mod:
     mod = Mod(
         name=name,
@@ -50,6 +51,7 @@ async def create(
         mod_type=mod_type,
         loader=loader,
         mc_version=mc_version,
+        server_side=server_side,
     )
     db.add(mod)
     await db.commit()

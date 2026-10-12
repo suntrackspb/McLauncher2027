@@ -37,3 +37,10 @@ def delete_mod_file(file_hash: str) -> None:
 def mod_url(file_hash: str) -> str:
     base = settings.public_base_url.rstrip("/")
     return f"{base}/mod-files/{file_hash}.jar"
+
+
+def read_mod_file(file_hash: str) -> bytes:
+    path = _storage_dir() / f"{file_hash}.jar"
+    if not path.exists():
+        raise ServiceError(f"Файл мода {file_hash}.jar пропал из хранилища", error_code="NotFound")
+    return path.read_bytes()

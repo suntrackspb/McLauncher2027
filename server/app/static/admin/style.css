@@ -225,3 +225,16 @@ main { max-width: 860px; padding: 28px 32px 64px; }
 .mr-results .mr-title { font-weight: 500; }
 .mr-results .mr-meta { font-size: 12.5px; color: var(--muted); }
 .mr-results .mr-desc { grid-column: 2 / -1; font-size: 13px; color: var(--muted); }
+
+.section-title { margin: 32px 0 4px; }
+.field.full, .form-grid .full { grid-column: 1 / -1; }
+.field > textarea { margin-top: 6px; width: 100%; box-sizing: border-box; resize: vertical; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 10px; }
+.sync-report { margin-top: 14px; display: grid; gap: 10px; font-size: 14px; }
+.sync-report:empty { display: none; }
+.sync-report h3 { font-size: 14px; margin: 0 0 4px; font-weight: 600; }
+.sync-report ul { margin: 0; padding-left: 18px; }
+.sync-report .add { color: var(--accent); }
+.sync-report .del { color: var(--warn); }
+.sync-report .err { color: var(--danger, #e5484d); }
+@media (max-width: 640px) { .form-grid, .two-cols { grid-template-columns: 1fr; } }
+.badge-muted { border-color: var(--line); color: var(--muted); }

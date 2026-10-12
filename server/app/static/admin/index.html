@@ -78,6 +78,7 @@
               <select id="profile-loader">
                 <option value="vanilla">vanilla</option>
                 <option value="forge">forge</option>
+                <option value="neoforge">neoforge</option>
                 <option value="fabric">fabric</option>
                 <option value="quilt">quilt</option>
               </select>
@@ -100,6 +101,55 @@
               <button type="button" class="btn btn-ghost" id="profile-reset" hidden>Отменить изменения</button>
             </div>
           </form>
+
+          <h2 class="section-title">Подключение к серверу</h2>
+          <p class="muted small">Через него админка кладёт на сервер моды из профиля и наш authlib. FTP — если сервер у хостера с панелью (сам сервер ставит панель). SFTP — свой сервер с доступом по SSH.</p>
+          <form id="conn-form" class="panel form-grid" novalidate autocomplete="off">
+            <label class="field">Протокол
+              <select id="conn-protocol">
+                <option value="sftp">SFTP (SSH)</option>
+                <option value="ftp">FTP</option>
+                <option value="ftps">FTPS (FTP + TLS)</option>
+              </select>
+            </label>
+            <div class="two-cols">
+              <label class="field">Хост
+                <input type="text" id="conn-host" required class="mono" placeholder="192.168.1.10" />
+              </label>
+              <label class="field">Порт
+                <input type="number" id="conn-port" min="1" max="65535" class="mono" placeholder="22" />
+              </label>
+            </div>
+            <label class="field">Пользователь
+              <input type="text" id="conn-username" required class="mono" autocomplete="off" />
+            </label>
+            <label class="field">Пароль
+              <input type="password" id="conn-password" class="mono" autocomplete="new-password" />
+            </label>
+            <label class="field full" id="field-conn-key">Приватный SSH-ключ (вместо пароля)
+              <textarea id="conn-key" rows="3" class="mono" spellcheck="false" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"></textarea>
+            </label>
+            <label class="field full">Папка сервера (там, где mods/ и server.properties)
+              <input type="text" id="conn-server_dir" required class="mono" placeholder="/opt/minecraft/forge" />
+            </label>
+            <p class="muted small full" id="conn-secrets-hint" hidden></p>
+            <p class="muted small full mono" id="conn-hostkey" hidden></p>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary" id="conn-save">Сохранить</button>
+              <button type="button" class="btn" id="conn-test" disabled>Проверить подключение</button>
+              <button type="button" class="btn btn-ghost" id="conn-reset-key" hidden>Сбросить ключ хоста</button>
+            </div>
+          </form>
+
+          <h2 class="section-title">Синхронизация с сервером</h2>
+          <p class="muted small">Сначала покажу, что изменится. Лишние моды не удаляются, а уходят в <span class="mono">mods_removed/</span>, оригинальный authlib сохраняется рядом как <span class="mono">.orig</span>. После применения перезапустите сервер.</p>
+          <div class="panel">
+            <div class="form-actions">
+              <button type="button" class="btn" id="sync-plan" disabled>Проверить, что изменится</button>
+              <button type="button" class="btn btn-primary" id="sync-apply" disabled>Применить</button>
+            </div>
+            <div id="sync-report" class="sync-report"></div>
+          </div>
         </section>
       </main>
     </div>
@@ -179,6 +229,10 @@
           <button type="button" data-type="optional">Необязательный</button>
         </div>
       </div>
+      <label class="switch">
+        <input type="checkbox" id="edit-server_side" />
+        <span>Нужен на сервере (заливать при синхронизации)</span>
+      </label>
       <div class="two-cols">
         <label class="field">Загрузчик
           <input type="text" id="edit-loader" required class="mono" />

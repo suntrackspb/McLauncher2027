@@ -6,14 +6,22 @@ services:
       POSTGRES_USER: launcher
       POSTGRES_PASSWORD: launcher
       POSTGRES_DB: launcher
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U launcher -d launcher"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
     volumes:
       - db_data:/var/lib/postgresql/data
 
   backend:
     build: .
     restart: unless-stopped
+    # Миграции (alembic upgrade head) идут в CMD при каждом старте контейнера —
+    # ждём, пока Postgres реально начнёт принимать подключения.
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     environment:
       DATABASE_URL: postgresql+asyncpg://launcher:launcher@db/launcher
     ports:

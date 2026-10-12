@@ -32,6 +32,7 @@ async def upload_mod(
     loader: str,
     mc_version: str,
     content: bytes,
+    server_side: bool = True,
 ) -> Mod:
     file_hash, size = mod_storage.save_mod_file(content)
     return await crud_mod.create(
@@ -45,6 +46,7 @@ async def upload_mod(
         mod_type=mod_type,
         loader=loader,
         mc_version=mc_version,
+        server_side=server_side,
     )
 
 

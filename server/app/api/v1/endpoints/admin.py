@@ -43,6 +43,7 @@ async def upload_mod(
     mod_type: ModType = Form(...),
     loader: str = Form(...),
     mc_version: str = Form(...),
+    server_side: bool = Form(True),
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
 ):
@@ -56,6 +57,7 @@ async def upload_mod(
             loader=loader,
             mc_version=mc_version,
             content=await file.read(),
+            server_side=server_side,
         )
     except ServiceError as exc:
         raise HTTPException(status_code=400, detail=exc.message) from exc
@@ -70,7 +72,7 @@ async def update_mod(mod_id: int, payload: ModUpdate, db: AsyncSession = Depends
     if "description" in fields and fields["description"] is not None:
         fields["description"] = fields["description"].strip() or None
     # name/mod_type/loader/mc_version в БД не nullable — явный null не принимаем
-    for key in ("name", "mod_type", "loader", "mc_version"):
+    for key in ("name", "mod_type", "loader", "mc_version", "server_side"):
         if key in fields and fields[key] is None:
             raise HTTPException(status_code=422, detail=f"Поле {key} не может быть null")
     try:

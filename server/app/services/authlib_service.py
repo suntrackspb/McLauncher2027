@@ -32,3 +32,9 @@ def list_jars() -> list[AuthlibJarOut]:
             AuthlibJarOut(version=match.group("version"), url=f"{base}/authlib-files/{path.name}")
         )
     return jars
+
+
+def patched_jar(version: str) -> bytes | None:
+    """Пропатченный authlib нужной версии или None, если такого нет."""
+    path = _storage_dir() / f"authlib-{version}_skinfix.jar"
+    return path.read_bytes() if path.exists() else None

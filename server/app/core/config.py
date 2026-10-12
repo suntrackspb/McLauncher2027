@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     # сгенерирован один раз и сохранён в `<state_dir>/admin_jwt_secret.txt`.
     admin_jwt_secret: str = ""
     admin_state_dir: str = "./storage"
+    # Ключ шифрования паролей/ключей подключения к игровому серверу — так же:
+    # из .env или сгенерирован один раз в `<state_dir>/connection_secret.txt`.
+    connection_secret: str = ""
 
 
 settings = Settings()

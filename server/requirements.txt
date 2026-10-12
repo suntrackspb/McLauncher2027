@@ -13,3 +13,6 @@ pytest==8.3.3
 pytest-asyncio==0.24.0
 pytest-mock==3.14.0
 httpx==0.27.2
+paramiko==3.5.0
+cryptography==50.0.2
+pyftpdlib==2.0.1

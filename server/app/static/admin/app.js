@@ -6,6 +6,7 @@ const state = {
   mods: [],
   authlib: [],
   launcher: null,
+  connection: null,
 };
 
 // --- утилиты ---------------------------------------------------------------
@@ -97,8 +98,141 @@ async function loadExtras() {
 }
 
 async function refreshAll() {
-  await Promise.all([loadProfile(), loadMods(), loadExtras()]);
+  await Promise.all([loadProfile(), loadMods(), loadExtras(), loadConnection()]);
   renderAll();
+  fillConnForm();
+}
+
+// --- подключение к серверу и синхронизация ------------------------------------
+
+const DEFAULT_PORTS = { sftp: 22, ftp: 21, ftps: 21 };
+
+async function loadConnection() {
+  state.connection = await api("/admin/server/connection").catch(() => null);
+}
+
+function fillConnForm() {
+  const c = state.connection;
+  $("conn-protocol").value = c?.protocol ?? "sftp";
+  $("conn-host").value = c?.host ?? "";
+  $("conn-port").value = c?.port ?? "";
+  $("conn-username").value = c?.username ?? "";
+  $("conn-server_dir").value = c?.server_dir ?? "";
+  $("conn-password").value = "";
+  $("conn-key").value = "";
+  const saved = [c?.has_password && "пароль", c?.has_private_key && "SSH-ключ"].filter(Boolean);
+  $("conn-secrets-hint").hidden = !saved.length;
+  $("conn-secrets-hint").textContent = saved.length
+    ? `Сохранён ${saved.join(" и ")}. Оставьте поле пустым, чтобы не менять.` : "";
+  $("conn-hostkey").hidden = !c?.host_key;
+  $("conn-hostkey").textContent = c?.host_key ? `Ключ хоста: ${c.host_key.slice(0, 60)}…` : "";
+  $("conn-reset-key").hidden = !c?.host_key;
+  for (const id of ["conn-test", "sync-plan"]) $(id).disabled = !c;
+  $("sync-apply").disabled = true;
+  onConnProtocol();
+}
+
+function onConnProtocol() {
+  const proto = $("conn-protocol").value;
+  $("field-conn-key").hidden = proto !== "sftp";
+  $("conn-port").placeholder = String(DEFAULT_PORTS[proto]);
+}
+
+async function saveConnection(event, { resetHostKey = false } = {}) {
+  event?.preventDefault();
+  const proto = $("conn-protocol").value;
+  const body = {
+    protocol: proto,
+    host: $("conn-host").value.trim(),
+    port: Number($("conn-port").value) || null,
+    username: $("conn-username").value.trim(),
+    server_dir: $("conn-server_dir").value.trim(),
+    // пустое поле = не менять сохранённое
+    password: $("conn-password").value || null,
+    private_key: proto === "sftp" ? ($("conn-key").value.trim() || null) : null,
+    reset_host_key: resetHostKey,
+  };
+  if (!body.host || !body.username || !body.server_dir) {
+    toast("Заполните хост, пользователя и папку сервера", true);
+    return;
+  }
+  try {
+    state.connection = await api("/admin/server/connection", {
+      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    });
+    fillConnForm();
+    $("sync-report").replaceChildren();
+    toast("Подключение сохранено");
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+
+async function testConnection() {
+  const btn = $("conn-test");
+  btn.disabled = true;
+  btn.textContent = "Подключаюсь…";
+  try {
+    const r = await api("/admin/server/connection/test", { method: "POST" });
+    const missing = [!r.mods_dir && "mods/", !r.libraries_dir && "libraries/", !r.server_properties && "server.properties"].filter(Boolean);
+    toast(missing.length ? `Подключено, но в папке нет: ${missing.join(", ")}` : "Подключение работает", !!missing.length);
+    await loadConnection();
+    fillConnForm();
+  } catch (err) {
+    toast(err.message, true);
+  } finally {
+    btn.textContent = "Проверить подключение";
+    btn.disabled = !state.connection;
+  }
+}
+
+const AUTHLIB_STATE = {
+  patched: ["ok", "уже наш"],
+  to_patch: ["add", "будет заменён на наш"],
+  no_patch: ["err", "нет пропатченного authlib этой версии — игроки не войдут"],
+};
+
+function renderSync(r) {
+  const root = $("sync-report");
+  const list = (items, cls) => el("ul", {}, items.map((t) => el("li", { class: cls, text: t })));
+  const blocks = [];
+  if (r.applied) blocks.push(el("p", { class: "add", text: "Готово. Перезапустите сервер, чтобы изменения применились." }));
+  const modsChanged = r.mods_upload.length || r.mods_remove.length;
+  blocks.push(el("div", {}, el("h3", { text: "Моды" }),
+    modsChanged || r.mods_ok.length
+      ? list([
+          ...r.mods_upload.map((n) => `${r.applied ? "залит" : "залить"}: ${n}`),
+          ...r.mods_remove.map((n) => `${r.applied ? "убран" : "убрать"} в бэкап: ${n}`),
+          ...r.mods_ok.map((n) => `на месте: ${n}`),
+        ], "")
+      : el("p", { class: "muted", text: "Модов для сервера нет" })));
+  for (const li of blocks.at(-1).querySelectorAll("li")) {
+    li.className = /^(залит|залить)/.test(li.textContent) ? "add" : /^(убран|убрать)/.test(li.textContent) ? "del" : "muted";
+  }
+  if (r.backup_dir) blocks.push(el("p", { class: "muted small mono", text: `Бэкап: ${r.backup_dir}` }));
+  const authlib = Object.entries(r.authlib);
+  blocks.push(el("div", {}, el("h3", { text: "authlib" }),
+    authlib.length
+      ? el("ul", {}, authlib.map(([v, s]) => el("li", { class: AUTHLIB_STATE[s][0], text: `${v}: ${AUTHLIB_STATE[s][1]}` })))
+      : el("p", { class: "err", text: "authlib не найден в libraries/ — сервер ещё не запускался или устроен иначе (vanilla с bundler распаковывает библиотеки при старте)." })));
+  root.replaceChildren(...blocks);
+  const pending = !r.applied && (modsChanged || authlib.some(([, s]) => s === "to_patch"));
+  $("sync-apply").disabled = !pending;
+}
+
+async function runSync(apply) {
+  const btn = $(apply ? "sync-apply" : "sync-plan");
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = apply ? "Применяю…" : "Проверяю…";
+  try {
+    renderSync(await api("/admin/server/sync", { method: apply ? "POST" : "GET" }));
+  } catch (err) {
+    $("sync-report").replaceChildren(el("p", { class: "err", text: err.message }));
+  } finally {
+    btn.textContent = label;
+    $("sync-plan").disabled = !state.connection;
+  }
 }
 
 function matchesProfile(mod) {
@@ -228,7 +362,9 @@ function renderMods() {
 
 function modRow(mod) {
   const other = !matchesProfile(mod);
-  const nameEl = el("div", { class: "name" }, mod.name, other ? el("span", { class: "badge", text: "другая версия" }) : null);
+  const nameEl = el("div", { class: "name" }, mod.name,
+    other ? el("span", { class: "badge", text: "другая версия" }) : null,
+    mod.server_side === false ? el("span", { class: "badge badge-muted", text: "только клиент" }) : null);
   return el("div", { class: other ? "mod other" : "mod" },
     el("div", {}, nameEl, el("div", { class: "file", text: mod.file_name })),
     el("div", { class: "meta", text: `${mod.loader} ${mod.mc_version} · ${formatSize(mod.size)}` }),
@@ -343,6 +479,7 @@ function editValues() {
     mod_type: editing.type,
     loader: $("edit-loader").value.trim(),
     mc_version: $("edit-mc_version").value.trim(),
+    server_side: $("edit-server_side").checked,
   };
 }
 
@@ -371,6 +508,7 @@ function openEdit(mod) {
   $("edit-description").value = mod.description || "";
   $("edit-loader").value = mod.loader;
   $("edit-mc_version").value = mod.mc_version;
+  $("edit-server_side").checked = mod.server_side !== false;
   syncEdit();
   $("dlg-edit").showModal();
 }
@@ -687,6 +825,13 @@ function init() {
   $("profile-form").addEventListener("input", onProfileInput);
   $("profile-form").addEventListener("submit", saveProfile);
   $("profile-reset").addEventListener("click", fillProfileForm);
+
+  $("conn-form").addEventListener("submit", saveConnection);
+  $("conn-protocol").addEventListener("change", onConnProtocol);
+  $("conn-test").addEventListener("click", testConnection);
+  $("conn-reset-key").addEventListener("click", () => saveConnection(null, { resetHostKey: true }));
+  $("sync-plan").addEventListener("click", () => runSync(false));
+  $("sync-apply").addEventListener("click", () => runSync(true));
 
   if (getToken()) enterMain();
   else showScreen("login");

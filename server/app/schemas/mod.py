@@ -16,6 +16,7 @@ class ModOut(BaseModel):
     mod_type: ModType
     loader: str
     mc_version: str
+    server_side: bool = True
 
 
 class ModUpdate(BaseModel):
@@ -26,3 +27,4 @@ class ModUpdate(BaseModel):
     mod_type: ModType | None = None
     loader: str | None = Field(None, min_length=1, max_length=32)
     mc_version: str | None = Field(None, min_length=1, max_length=32)
+    server_side: bool | None = None
