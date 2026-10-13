@@ -1,5 +1,6 @@
 import base64
 import json
+from urllib.parse import urljoin
 
 import requests
 
@@ -94,6 +95,8 @@ class ApiClient:
         return {}
 
     def download_bytes(self, url: str) -> bytes:
+        # Бэкенд без PUBLIC_BASE_URL отдаёт относительные ссылки — достраиваем.
+        url = urljoin(self.base_url + "/", url)
         try:
             resp = self._session.get(url, timeout=self.timeout)
         except requests.RequestException as exc:

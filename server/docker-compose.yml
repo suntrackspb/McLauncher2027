@@ -22,6 +22,12 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    # .env в образ не попадает (.dockerignore) — передаём его в окружение,
+    # иначе пустой PUBLIC_BASE_URL и ссылки на скины/моды без адреса.
+    # environment ниже имеет приоритет (DATABASE_URL из .env — для запуска без докера).
+    env_file:
+      - path: .env
+        required: false
     environment:
       DATABASE_URL: postgresql+asyncpg://launcher:launcher@db/launcher
     ports:
