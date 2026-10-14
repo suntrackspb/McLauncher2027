@@ -616,9 +616,24 @@ async function sendRcon(event) {
 
 async function enableRcon() {
   try {
-    await api("/admin/server/rcon/enable", { method: "POST" });
-    toast("RCON включён в server.properties. Перезапустите сервер.");
-    await loadStatus();
+    const btn = $("rcon-enable");
+    btn.disabled = true;
+    let r;
+    try {
+      r = await api("/admin/server/rcon/enable", { method: "POST" });
+    } finally {
+      btn.disabled = false;
+    }
+    if (r.restarted) {
+      toast("RCON включён, сервер перезапускается — консоль заработает после загрузки мира");
+      pollStatusAfterAction(20);
+    } else if (r.needs_restart) {
+      toast("RCON включён в server.properties. Перезапустите сервер через панель хостера.");
+      await loadStatus();
+    } else {
+      toast("RCON включён — заработает при следующем запуске сервера");
+      await loadStatus();
+    }
   } catch (err) {
     toast(err.message, true);
   }

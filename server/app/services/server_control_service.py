@@ -64,15 +64,59 @@ async def _with_fs(db: AsyncSession, fn):
     return result
 
 
+_UNIT_DIRS = "/etc/systemd/system /lib/systemd/system /usr/lib/systemd/system"
+
+
+def _service_name(fs: RemoteFS, conn) -> str | None:
+    """Имя systemd-сервиса: из настроек, а если не указано — ищем unit,
+    у которого WorkingDirectory совпадает с папкой сервера. Так управление
+    работает на свежей VM без ручной настройки."""
+    if not isinstance(fs, SftpFS):
+        return None
+    if conn.service_name:
+        return conn.service_name
+    root = conn.server_dir.rstrip("/") or "/"
+    patterns = " ".join(
+        f"-e {shlex.quote(f'WorkingDirectory={d}')}" for d in (root, root + "/")
+    )
+    _, out = fs.run(
+        f"for d in {_UNIT_DIRS}; do grep -lsxF {patterns} \"$d\"/*.service; done"
+    )
+    for line in out.splitlines():
+        name = line.strip().rsplit("/", 1)[-1]
+        if name.endswith(".service"):
+            return name.removesuffix(".service")
+    return None
+
+
 def _require_ssh(fs: RemoteFS, conn) -> str:
     if not isinstance(fs, SftpFS):
         raise ServiceError(
             "Управление запуском доступно только по SFTP/SSH. На хостинге используйте панель хостера.",
             error_code="UNSUPPORTED",
         )
-    if not conn.service_name:
-        raise ServiceError("Не указан systemd-сервис сервера в настройках подключения", error_code="UNSUPPORTED")
-    return shlex.quote(conn.service_name)
+    service = _service_name(fs, conn)
+    if not service:
+        raise ServiceError(
+            f"Не найден systemd-сервис с WorkingDirectory={conn.server_dir} — укажите его в настройках подключения",
+            error_code="UNSUPPORTED",
+        )
+    return shlex.quote(service)
+
+
+def _systemctl(fs: SftpFS, conn, action: str, unit: str) -> str:
+    # root — как есть; другой пользователь — через sudo (без пароля).
+    prefix = "" if conn.username == "root" else "sudo -n "
+    code, out = fs.run(f"{prefix}systemctl {action} {unit}", timeout=120)
+    if code != 0:
+        if "password is required" in out or "not allowed" in out or "may not run" in out:
+            raise ServiceError(
+                f"Нет прав: пользователю нужен sudo без пароля на «systemctl {action} {unit}». {out}",
+                error_code="REMOTE",
+            )
+        raise ServiceError(f"systemctl {action} завершился с кодом {code}: {out}", error_code="REMOTE")
+    _, state = fs.run(f"systemctl is-active {unit}")
+    return state.splitlines()[-1] if state else "unknown"
 
 
 def _read_props(fs: RemoteFS) -> dict[str, str]:
@@ -93,12 +137,13 @@ async def status(db: AsyncSession) -> dict:
     def fn(fs, conn):
         props = _read_props(fs)
         state = None
-        if isinstance(fs, SftpFS) and conn.service_name:
-            _, out = fs.run(f"systemctl is-active {shlex.quote(conn.service_name)}")
+        service = _service_name(fs, conn)
+        if service:
+            _, out = fs.run(f"systemctl is-active {shlex.quote(service)}")
             state = out.splitlines()[-1] if out else "unknown"
-        return props, state, isinstance(fs, SftpFS) and bool(conn.service_name)
+        return props, state, service
 
-    props, state, can_control = await _with_fs(db, fn)
+    props, state, service = await _with_fs(db, fn)
     target = await _rcon_target(db, props)
     players = None
     rcon_error = None
@@ -109,7 +154,8 @@ async def status(db: AsyncSession) -> dict:
             rcon_error = str(exc)
     return {
         "service_state": state,  # active / inactive / failed / activating… или None без SSH
-        "can_control": can_control,
+        "can_control": service is not None,
+        "service_name": service,
         "rcon_enabled": target is not None,
         "rcon_error": rcon_error,
         "players": players,
@@ -122,18 +168,7 @@ async def control(db: AsyncSession, action: str) -> dict:
 
     def fn(fs, conn):
         unit = _require_ssh(fs, conn)
-        # root — как есть; другой пользователь — через sudo (без пароля).
-        prefix = "" if conn.username == "root" else "sudo -n "
-        code, out = fs.run(f"{prefix}systemctl {action} {unit}", timeout=120)
-        if code != 0:
-            if "password is required" in out or "not allowed" in out or "may not run" in out:
-                raise ServiceError(
-                    f"Нет прав: пользователю нужен sudo без пароля на «systemctl {action} {conn.service_name}». {out}",
-                    error_code="REMOTE",
-                )
-            raise ServiceError(f"systemctl {action} завершился с кодом {code}: {out}", error_code="REMOTE")
-        _, state = fs.run(f"systemctl is-active {unit}")
-        return {"ok": True, "service_state": state.splitlines()[-1] if state else "unknown"}
+        return {"ok": True, "service_state": _systemctl(fs, conn, action, unit)}
 
     return await _with_fs(db, fn)
 
@@ -173,6 +208,16 @@ async def enable_rcon(db: AsyncSession) -> dict:
         if not props.get("rcon.password"):
             updates["rcon.password"] = secrets.token_urlsafe(18)
         fs.write("server.properties", set_properties(text, updates).encode("utf-8"))
-        return {"ok": True, "needs_restart": True}
+        # Minecraft читает server.properties только при старте. Если сервером
+        # управляем сами — перезапускаем сразу, а не отправляем админа в консоль.
+        service = _service_name(fs, conn)
+        if service:
+            unit = shlex.quote(service)
+            _, state = fs.run(f"systemctl is-active {unit}")
+            if state.strip().splitlines()[-1:] == ["active"]:
+                _systemctl(fs, conn, "restart", unit)
+                return {"ok": True, "restarted": True, "needs_restart": False}
+            return {"ok": True, "restarted": False, "needs_restart": False}
+        return {"ok": True, "restarted": False, "needs_restart": True}
 
     return await _with_fs(db, fn)
