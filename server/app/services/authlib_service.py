@@ -1,3 +1,4 @@
+import hashlib
 import re
 from pathlib import Path
 
@@ -29,7 +30,11 @@ def list_jars() -> list[AuthlibJarOut]:
         if not match:
             continue
         jars.append(
-            AuthlibJarOut(version=match.group("version"), url=f"{base}/authlib-files/{path.name}")
+            AuthlibJarOut(
+                version=match.group("version"),
+                url=f"{base}/authlib-files/{path.name}",
+                sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+            )
         )
     return jars
 

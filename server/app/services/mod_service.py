@@ -33,6 +33,7 @@ async def upload_mod(
     mc_version: str,
     content: bytes,
     server_side: bool = True,
+    modrinth_project_id: str | None = None,
 ) -> Mod:
     file_hash, size = mod_storage.save_mod_file(content)
     return await crud_mod.create(
@@ -47,6 +48,7 @@ async def upload_mod(
         loader=loader,
         mc_version=mc_version,
         server_side=server_side,
+        modrinth_project_id=modrinth_project_id,
     )
 
 

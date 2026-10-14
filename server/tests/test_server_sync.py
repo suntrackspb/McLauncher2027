@@ -214,3 +214,17 @@ async def test_ftp_status_log_and_rcon(client, ftp_server, ftp_root, rcon_server
     (ftp_root / "server.properties").write_text(f"enable-rcon=true\nrcon.port={rcon_server}\nrcon.password=bad\n")
     bad = await client.post("/api/v1/admin/server/rcon", headers=headers, json={"command": "list"})
     assert bad.status_code == 502 and "пароль" in bad.json()["detail"]
+
+
+async def test_apply_rejects_stale_plan(client, ftp_server, ftp_root):
+    headers = await _admin(client)
+    await _connect(client, headers, ftp_server)
+    plan = (await client.get("/api/v1/admin/server/sync", headers=headers)).json()
+    assert plan["plan_id"]
+    (ftp_root / "mods" / "new-stray.jar").write_bytes(b"PK\x03\x04x")  # сервер изменился
+    resp = await client.post("/api/v1/admin/server/sync", headers=headers, json={"plan_id": plan["plan_id"]})
+    assert resp.status_code == 409
+    assert (ftp_root / "mods" / "stray.jar").exists()  # ничего не применилось
+    fresh = (await client.get("/api/v1/admin/server/sync", headers=headers)).json()
+    ok = await client.post("/api/v1/admin/server/sync", headers=headers, json={"plan_id": fresh["plan_id"]})
+    assert ok.status_code == 200 and ok.json()["applied"] is True

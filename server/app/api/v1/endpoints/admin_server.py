@@ -44,7 +44,7 @@ def _out(conn) -> dict | None:
 
 
 def _http(exc: ServiceError) -> HTTPException:
-    status = {"NO_CONNECTION": 409, "NO_PROFILE": 409, "UNSUPPORTED": 409, "REMOTE": 502, "NotFound": 404}.get(exc.error_code, 400)
+    status = {"NO_CONNECTION": 409, "NO_PROFILE": 409, "UNSUPPORTED": 409, "CONFLICT": 409, "REMOTE": 502, "NotFound": 404}.get(exc.error_code, 400)
     return HTTPException(status_code=status, detail=exc.message)
 
 
@@ -74,10 +74,14 @@ async def sync_plan(db: AsyncSession = Depends(get_db)):
         raise _http(exc) from exc
 
 
+class SyncApplyIn(BaseModel):
+    plan_id: str | None = None
+
+
 @router.post("/sync")
-async def sync_apply(db: AsyncSession = Depends(get_db)):
+async def sync_apply(payload: SyncApplyIn | None = None, db: AsyncSession = Depends(get_db)):
     try:
-        return await service.sync(db, apply=True)
+        return await service.sync(db, apply=True, plan_id=payload.plan_id if payload else None)
     except ServiceError as exc:
         raise _http(exc) from exc
 

@@ -72,6 +72,10 @@ async function api(path, options = {}, { auth = true } = {}) {
 }
 
 function showScreen(name) {
+  if (name === "login") {
+    leaveControl();
+    controlLoaded = false;
+  }
   $("screen-login").hidden = name !== "login";
   $("screen-main").hidden = name !== "main";
 }
@@ -98,11 +102,13 @@ async function loadExtras() {
 }
 
 async function refreshAll() {
-  await Promise.all([loadProfile(), loadMods(), loadExtras(), loadConnection()]);
+  // Падение одной загрузки не должно прятать остальное.
+  const results = await Promise.allSettled([loadProfile(), loadMods(), loadExtras(), loadConnection()]);
   renderAll();
+  const failed = results.find((r) => r.status === "rejected");
+  if (failed) toast(failed.reason.message, true);
   fillConnForm();
   controlLoaded = false;
-  if (location.hash.startsWith("#/control")) enterControl();
 }
 
 // --- подключение к серверу и синхронизация ------------------------------------
@@ -181,8 +187,12 @@ async function testConnection() {
     const r = await api("/admin/server/connection/test", { method: "POST" });
     const missing = [!r.mods_dir && "mods/", !r.libraries_dir && "libraries/", !r.server_properties && "server.properties"].filter(Boolean);
     toast(missing.length ? `Подключено, но в папке нет: ${missing.join(", ")}` : "Подключение работает", !!missing.length);
+    // Обновляем только ключ хоста — несохранённые правки формы не трогаем.
     await loadConnection();
-    fillConnForm();
+    const c = state.connection;
+    $("conn-hostkey").hidden = !c?.host_key;
+    $("conn-hostkey").textContent = c?.host_key ? `Ключ хоста: ${c.host_key.slice(0, 60)}…` : "";
+    $("conn-reset-key").hidden = !c?.host_key;
   } catch (err) {
     toast(err.message, true);
   } finally {
@@ -197,23 +207,23 @@ const AUTHLIB_STATE = {
   no_patch: ["err", "нет пропатченного authlib этой версии — игроки не войдут"],
 };
 
+let lastPlan = null;
+
 function renderSync(r) {
+  lastPlan = r.applied ? null : r;
   const root = $("sync-report");
-  const list = (items, cls) => el("ul", {}, items.map((t) => el("li", { class: cls, text: t })));
+  const list = (items) => el("ul", {}, items.map(([cls, t]) => el("li", { class: cls, text: t })));
   const blocks = [];
   if (r.applied) blocks.push(el("p", { class: "add", text: "Готово. Перезапустите сервер, чтобы изменения применились." }));
   const modsChanged = r.mods_upload.length || r.mods_remove.length;
   blocks.push(el("div", {}, el("h3", { text: "Моды" }),
     modsChanged || r.mods_ok.length
       ? list([
-          ...r.mods_upload.map((n) => `${r.applied ? "залит" : "залить"}: ${n}`),
-          ...r.mods_remove.map((n) => `${r.applied ? "убран" : "убрать"} в бэкап: ${n}`),
-          ...r.mods_ok.map((n) => `на месте: ${n}`),
-        ], "")
+          ...r.mods_upload.map((n) => ["add", `${r.applied ? "залит" : "залить"}: ${n}`]),
+          ...r.mods_remove.map((n) => ["del", `${r.applied ? "убран" : "убрать"} в бэкап: ${n}`]),
+          ...r.mods_ok.map((n) => ["muted", `на месте: ${n}`]),
+        ])
       : el("p", { class: "muted", text: "Модов для сервера нет" })));
-  for (const li of blocks.at(-1).querySelectorAll("li")) {
-    li.className = /^(залит|залить)/.test(li.textContent) ? "add" : /^(убран|убрать)/.test(li.textContent) ? "del" : "muted";
-  }
   if (r.backup_dir) blocks.push(el("p", { class: "muted small mono", text: `Бэкап: ${r.backup_dir}` }));
   const authlib = Object.entries(r.authlib);
   blocks.push(el("div", {}, el("h3", { text: "authlib" }),
@@ -221,22 +231,46 @@ function renderSync(r) {
       ? el("ul", {}, authlib.map(([v, s]) => el("li", { class: AUTHLIB_STATE[s][0], text: `${v}: ${AUTHLIB_STATE[s][1]}` })))
       : el("p", { class: "err", text: "authlib не найден в libraries/ — сервер ещё не запускался или устроен иначе (vanilla с bundler распаковывает библиотеки при старте)." })));
   root.replaceChildren(...blocks);
-  const pending = !r.applied && (modsChanged || authlib.some(([, s]) => s === "to_patch"));
-  $("sync-apply").disabled = !pending;
+  $("sync-apply").disabled = r.applied || !planHasChanges(r);
+}
+
+function planHasChanges(r) {
+  return !!(r.mods_upload.length || r.mods_remove.length || Object.values(r.authlib).includes("to_patch"));
 }
 
 async function runSync(apply) {
+  if (apply) {
+    const p = lastPlan;
+    const patch = p ? Object.values(p.authlib).filter((s) => s === "to_patch").length : 0;
+    const parts = p ? [
+      p.mods_upload.length && `залить модов: ${p.mods_upload.length}`,
+      p.mods_remove.length && `убрать в бэкап: ${p.mods_remove.length}`,
+      patch && `заменить authlib: ${patch}`,
+    ].filter(Boolean) : [];
+    if (!confirm(`Применить на сервере?\n${parts.join("\n")}`)) return;
+  }
   const btn = $(apply ? "sync-apply" : "sync-plan");
   const label = btn.textContent;
   btn.disabled = true;
   btn.textContent = apply ? "Применяю…" : "Проверяю…";
   try {
-    renderSync(await api("/admin/server/sync", { method: apply ? "POST" : "GET" }));
+    renderSync(await api("/admin/server/sync", apply
+      ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ plan_id: lastPlan?.plan_id }) }
+      : { method: "GET" }));
   } catch (err) {
+    if (apply && err.status === 409) {
+      toast("На сервере что-то поменялось с момента проверки — показываю новый план", true);
+      lastPlan = null;
+      btn.textContent = label;
+      await runSync(false);
+      return;
+    }
     $("sync-report").replaceChildren(el("p", { class: "err", text: err.message }));
   } finally {
     btn.textContent = label;
     $("sync-plan").disabled = !state.connection;
+    // после ошибки применения план остаётся — можно повторить
+    $("sync-apply").disabled = !lastPlan || !planHasChanges(lastPlan);
   }
 }
 
@@ -251,7 +285,7 @@ function renderAll() {
   renderStrip();
   renderOverview();
   renderMods();
-  fillProfileForm();
+  if (!profileEdited) fillProfileForm();
   const forProfile = state.mods.filter(matchesProfile).length;
   $("nav-mods-count").textContent = state.mods.length ? String(forProfile) : "";
 }
@@ -420,8 +454,8 @@ async function searchModrinth(event) {
 }
 
 function modrinthRow(hit) {
-  const installedNames = new Set(state.mods.filter(matchesProfile).map((m) => m.name));
-  const already = installedNames.has(hit.title);
+  const installedIds = new Set(state.mods.filter(matchesProfile).map((m) => m.modrinth_project_id).filter(Boolean));
+  const already = installedIds.has(hit.project_id);
   const btn = el("button", { class: "btn btn-sm btn-primary", type: "button", text: already ? "Уже добавлен" : "Добавить" });
   if (already) btn.disabled = true;
   btn.addEventListener("click", async () => {
@@ -460,6 +494,7 @@ const STATE_LABEL = {
   deactivating: "Останавливается", unknown: "Неизвестно",
 };
 let logTimer = null;
+let statusTimer = null;
 let controlLoaded = false;
 
 async function enterControl() {
@@ -476,8 +511,10 @@ async function enterControl() {
 }
 
 function leaveControl() {
-  clearInterval(logTimer);
+  clearTimeout(logTimer);
   logTimer = null;
+  clearTimeout(statusTimer);
+  statusTimer = null;
 }
 
 async function loadStatus() {
@@ -487,7 +524,7 @@ async function loadStatus() {
     const st = s.service_state;
     stateEl.textContent = st ? (STATE_LABEL[st] || st) : (s.players != null ? "Работает" : "—");
     stateEl.className = `ctl-state ${st || (s.players != null ? "active" : "")}`;
-    $("ctl-players").textContent = s.players || s.rcon_error || (st ? "" : "Статус запуска виден только по SSH; без него — через панель хостера.");
+    $("ctl-players").textContent = s.players != null ? String(s.players) : s.rcon_error || (st ? "" : "Статус запуска виден только по SSH; без него — через панель хостера.");
     $("ctl-actions").hidden = !s.can_control;
     $("rcon-off").hidden = s.rcon_enabled;
     $("rcon-on").hidden = !s.rcon_enabled;
@@ -498,7 +535,11 @@ async function loadStatus() {
   }
 }
 
+let logBusy = false;
+
 async function loadLog() {
+  if (logBusy) return;
+  logBusy = true;
   const out = $("log-output");
   try {
     const r = await api("/admin/server/log?lines=300");
@@ -508,12 +549,28 @@ async function loadLog() {
     out.dataset.loaded = "1";
   } catch (err) {
     out.textContent = err.message;
+  } finally {
+    logBusy = false;
   }
 }
 
+// Следующий запрос — только после ответа предыдущего (SFTP/FTP бывает медленным).
+// После старт/рестарт сервер ещё грузится — обновляем статус ~20 с.
+function pollStatusAfterAction(left = 7) {
+  clearTimeout(statusTimer);
+  loadStatus();
+  if (left > 0) statusTimer = setTimeout(() => pollStatusAfterAction(left - 1), 3000);
+}
+
 function syncLogFollow() {
-  clearInterval(logTimer);
-  logTimer = $("log-follow").checked ? setInterval(loadLog, 3000) : null;
+  clearTimeout(logTimer);
+  logTimer = null;
+  if (!$("log-follow").checked) return;
+  const tick = async () => {
+    await loadLog();
+    if ($("log-follow").checked && logTimer !== null) logTimer = setTimeout(tick, 3000);
+  };
+  logTimer = setTimeout(tick, 3000);
 }
 
 async function serverAction(action) {
@@ -529,7 +586,7 @@ async function serverAction(action) {
     toast(err.message, true);
   } finally {
     buttons.forEach((b) => { b.disabled = false; });
-    await loadStatus();
+    pollStatusAfterAction();
     setTimeout(loadLog, 1500);
   }
 }
@@ -561,6 +618,7 @@ async function enableRcon() {
   try {
     await api("/admin/server/rcon/enable", { method: "POST" });
     toast("RCON включён в server.properties. Перезапустите сервер.");
+    await loadStatus();
   } catch (err) {
     toast(err.message, true);
   }
@@ -603,10 +661,12 @@ function editValues() {
 
 function editChanges() {
   const values = editValues();
-  const mod = editing.mod;
+  // Исходные значения приводим к виду формы, иначе "" vs null и
+  // отсутствующий server_side дают «изменения» без правок.
+  const orig = { ...editing.mod, description: editing.mod.description || null, server_side: editing.mod.server_side !== false };
   const changes = {};
   for (const key of Object.keys(values)) {
-    if (values[key] !== (mod[key] ?? null)) changes[key] = values[key];
+    if (values[key] !== (orig[key] ?? null)) changes[key] = values[key];
   }
   return changes;
 }
@@ -659,7 +719,7 @@ let bulkType = "required";
 
 function guessName(fileName) {
   let base = fileName.replace(/\.jar$/i, "");
-  base = base.replace(/[-_+ ]v?\d.*$/, "") || base;
+  base = base.replace(/[-_+ ](?:v|mc)?\d.*$/i, "") || base;
   base = base.replace(/[-_]+/g, " ").trim();
   return base ? base[0].toUpperCase() + base.slice(1) : fileName;
 }
@@ -805,7 +865,10 @@ function profileFromForm() {
   };
 }
 
+let profileEdited = false;
+
 function fillProfileForm() {
+  profileEdited = false;
   const p = state.profile;
   $("profile-mc_version").value = p?.mc_version ?? "";
   $("profile-loader").value = p?.loader ?? "forge";
@@ -822,7 +885,7 @@ function onProfileInput() {
   if (isVanilla) form.loader_version = null;
   const p = state.profile;
   const dirty = !p || PROFILE_FIELDS.some((k) => (form[k] ?? null) !== (p[k] ?? null));
-  const complete = form.mc_version && form.server_address && form.server_port >= 1 && form.server_port <= 65535;
+  const complete = form.mc_version && form.server_address && Number.isInteger(form.server_port) && form.server_port >= 1 && form.server_port <= 65535;
   $("profile-save").disabled = !dirty || !complete;
   $("profile-reset").hidden = !p || !dirty;
   $("profile-notice").hidden = !p || !dirty;
@@ -838,6 +901,7 @@ async function saveProfile(event) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
+    profileEdited = false;
     renderAll();
     toast("Профиль сохранён");
   } catch (err) {
@@ -861,12 +925,12 @@ function route() {
 
 async function enterMain() {
   showScreen("main");
-  route();
   try {
     await refreshAll();
   } catch (err) {
     toast(err.message, true);
   }
+  route();
 }
 
 // --- инициализация ---------------------------------------------------------
@@ -942,7 +1006,7 @@ function init() {
   $("edit-close").addEventListener("click", () => $("dlg-edit").close());
 
   // профиль
-  $("profile-form").addEventListener("input", onProfileInput);
+  $("profile-form").addEventListener("input", () => { profileEdited = true; onProfileInput(); });
   $("profile-form").addEventListener("submit", saveProfile);
   $("profile-reset").addEventListener("click", fillProfileForm);
 

@@ -5,6 +5,8 @@ sync(apply=False) — только план, что будет сделано; a
 Ничего не удаляет: лишние моды и оригинальный authlib уходят в бэкап.
 """
 
+import hashlib
+import json
 import posixpath
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -34,6 +36,8 @@ class SyncReport:
     authlib_found: bool = True
     applied: bool = False
     backup_dir: str | None = None
+    # Отпечаток плана: POST применяет только тот план, что админ видел.
+    plan_id: str = ""
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -46,7 +50,23 @@ def _jar_files(fs: RemoteFS, path: str) -> dict[str, int]:
         return {}  # папки ещё нет
 
 
-def sync(fs: RemoteFS, mods: list[ModToSync], *, apply: bool, sync_mods: bool = True) -> SyncReport:
+class PlanChanged(Exception):
+    pass
+
+
+def _plan_id(report: SyncReport) -> str:
+    data = json.dumps([report.mods_upload, report.mods_remove, report.authlib], sort_keys=True)
+    return hashlib.sha256(data.encode()).hexdigest()[:16]
+
+
+def sync(
+    fs: RemoteFS,
+    mods: list[ModToSync],
+    *,
+    apply: bool,
+    sync_mods: bool = True,
+    expected_plan_id: str | None = None,
+) -> SyncReport:
     report = SyncReport(applied=apply)
 
     if sync_mods:
@@ -75,8 +95,11 @@ def sync(fs: RemoteFS, mods: list[ModToSync], *, apply: bool, sync_mods: bool = 
         report.authlib[version] = "patched" if current == patched else "to_patch"
         originals[version] = current
 
+    report.plan_id = _plan_id(report)
     if not apply:
         return report
+    if expected_plan_id and expected_plan_id != report.plan_id:
+        raise PlanChanged()
 
     if report.mods_remove:
         stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")

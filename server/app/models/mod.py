@@ -28,6 +28,8 @@ class Mod(Base):
     mc_version: Mapped[str] = mapped_column(String(32))
     # Заливать ли мод на сам сервер при синхронизации. Чисто клиентские моды
     # (миникарта, шейдеры) серверу не нужны, а некоторые его даже роняют.
+    # Откуда мод поставлен из Modrinth — чтобы узнавать его в поиске.
+    modrinth_project_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     server_side: Mapped[bool] = mapped_column(Boolean, default=True, server_default=sa_true())
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

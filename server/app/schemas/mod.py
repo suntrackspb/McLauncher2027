@@ -17,6 +17,7 @@ class ModOut(BaseModel):
     loader: str
     mc_version: str
     server_side: bool = True
+    modrinth_project_id: str | None = None
 
 
 class ModUpdate(BaseModel):

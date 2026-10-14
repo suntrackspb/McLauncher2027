@@ -87,6 +87,7 @@ async def test_install_pulls_required_dependencies_once(client):
     installed = resp.json()["installed"]
     assert [m["file_name"] for m in installed] == ["jei-forge.jar", "lib.jar"]
     assert all(m["mod_type"] == "optional" and m["loader"] == "forge" and m["mc_version"] == "1.21" for m in installed)
+    assert [m["modrinth_project_id"] for m in installed] == ["jei", "lib"]
 
     again = await client.post("/api/v1/admin/modrinth/install", headers=headers, json=body)
     assert again.json() == {"installed": [], "skipped": ["JEI", "Lib"]}

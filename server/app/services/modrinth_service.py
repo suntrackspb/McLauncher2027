@@ -152,6 +152,7 @@ async def install(db: AsyncSession, project_id: str, mod_type: ModType) -> dict:
                     # Modrinth знает, нужен ли мод серверу: "unsupported" —
                     # чисто клиентский, на сервер его не заливаем.
                     server_side=project.get("server_side") != "unsupported",
+                    modrinth_project_id=pid,
                 )
                 known_hashes.add((file_hash, loader, mc_version))
                 installed.append(mod)

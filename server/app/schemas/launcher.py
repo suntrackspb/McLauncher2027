@@ -12,6 +12,9 @@ class LauncherVersionOut(BaseModel):
 class AuthlibJarOut(BaseModel):
     version: str
     url: str
+    # Чтобы клиент заметил перепатченный jar (например, сменился адрес
+    # бэкенда), а не держал старую копию из кэша вечно.
+    sha256: str
 
 
 class ServerProfileOut(BaseModel):

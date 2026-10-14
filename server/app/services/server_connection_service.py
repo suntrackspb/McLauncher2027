@@ -101,7 +101,7 @@ async def test(db: AsyncSession) -> dict:
     return {"ok": True, **found}
 
 
-async def sync(db: AsyncSession, *, apply: bool) -> dict:
+async def sync(db: AsyncSession, *, apply: bool, plan_id: str | None = None) -> dict:
     conn = await _require(db)
     profile = await profile_service.get_profile(db)
     loader = profile.loader.lower()
@@ -114,11 +114,13 @@ async def sync(db: AsyncSession, *, apply: bool) -> dict:
     def run():
         with open_remote(_params(conn)) as fs:
             # Vanilla без модов — папку mods не трогаем вовсе.
-            return fs.host_key, server_sync.sync(fs, mods, apply=apply, sync_mods=loader != "vanilla")
+            return fs.host_key, server_sync.sync(fs, mods, apply=apply, sync_mods=loader != "vanilla", expected_plan_id=plan_id)
 
     try:
         host_key, report = await asyncio.to_thread(run)
     except RemoteError as exc:
         raise ServiceError(str(exc), error_code="REMOTE") from exc
+    except server_sync.PlanChanged as exc:
+        raise ServiceError("План устарел: на сервере что-то изменилось с момента проверки", error_code="CONFLICT") from exc
     await _remember_host_key(db, conn, host_key)
     return report.to_dict()
