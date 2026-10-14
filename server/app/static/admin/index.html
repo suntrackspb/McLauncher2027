@@ -63,6 +63,8 @@
             </label>
           </div>
 
+          <div class="server-bar" id="server-bar" aria-live="polite"></div>
+
           <div id="mods-list"></div>
         </section>
 
@@ -73,16 +75,10 @@
 
           <form id="profile-form" class="panel form-grid" novalidate>
             <label class="field">Версия Minecraft
-              <input type="text" id="profile-mc_version" required placeholder="1.21" class="mono" />
+              <input type="text" id="profile-mc_version" required placeholder="1.21" class="mono" list="mc-versions" autocomplete="off" />
             </label>
             <label class="field">Загрузчик
-              <select id="profile-loader">
-                <option value="vanilla">vanilla</option>
-                <option value="forge">forge</option>
-                <option value="neoforge">neoforge</option>
-                <option value="fabric">fabric</option>
-                <option value="quilt">quilt</option>
-              </select>
+              <select id="profile-loader" data-loaders="vanilla"></select>
             </label>
             <label class="field" id="field-loader-version">Версия загрузчика
               <input type="text" id="profile-loader_version" placeholder="51.0.33" class="mono" />
@@ -220,10 +216,10 @@
 
     <div class="defaults" id="add-defaults" hidden>
       <label class="field">Загрузчик
-        <input type="text" id="add-loader" class="mono" />
+        <select id="add-loader" data-loaders></select>
       </label>
       <label class="field">Версия Minecraft
-        <input type="text" id="add-mc_version" class="mono" />
+        <input type="text" id="add-mc_version" class="mono" list="mc-versions" autocomplete="off" />
       </label>
       <div class="field">Тип для всех
         <div class="segmented" id="add-type-all" role="group" aria-label="Тип для всех файлов">
@@ -285,10 +281,10 @@
       </label>
       <div class="two-cols">
         <label class="field">Загрузчик
-          <input type="text" id="edit-loader" required class="mono" />
+          <select id="edit-loader" data-loaders></select>
         </label>
         <label class="field">Версия Minecraft
-          <input type="text" id="edit-mc_version" required class="mono" />
+          <input type="text" id="edit-mc_version" required class="mono" list="mc-versions" autocomplete="off" />
         </label>
       </div>
       <p class="muted small">Сам jar-файл не меняется. Чтобы заменить его, удалите мод и загрузите заново.</p>
@@ -311,6 +307,9 @@
       </div>
     </form>
   </dialog>
+
+  <!-- версии из профиля и уже загруженных модов -->
+  <datalist id="mc-versions"></datalist>
 
   <div class="toasts" id="toasts" aria-live="polite"></div>
 

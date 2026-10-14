@@ -7,7 +7,36 @@ const state = {
   authlib: [],
   launcher: null,
   connection: null,
+  // Содержимое mods/ на сервере: null — не смотрели, {loading}, {plan, at} или {error}
+  server: null,
 };
+
+const LOADERS = ["forge", "neoforge", "fabric", "quilt"];
+
+// Один список загрузчиков на все формы. data-loaders="vanilla" — добавить vanilla первым.
+function fillLoaderSelects() {
+  for (const select of document.querySelectorAll("select[data-loaders]")) {
+    const values = select.dataset.loaders === "vanilla" ? ["vanilla", ...LOADERS] : LOADERS;
+    select.replaceChildren(...values.map((v) => el("option", { value: v, text: v })));
+  }
+}
+
+// Ставит значение в select; незнакомое (старые записи) добавляет отдельной опцией, а не теряет.
+function setLoader(select, value) {
+  const v = (value || "").toLowerCase();
+  select.querySelector("option[data-extra]")?.remove();
+  if (v && ![...select.options].some((o) => o.value === v)) {
+    select.append(el("option", { value: v, text: `${v} (нет в списке)`, "data-extra": "" }));
+  }
+  select.value = v || select.options[0]?.value || "";
+}
+
+function fillVersionHints() {
+  const versions = new Set(state.mods.map((m) => m.mc_version));
+  if (state.profile) versions.add(state.profile.mc_version);
+  const sorted = [...versions].sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+  $("mc-versions").replaceChildren(...sorted.map((v) => el("option", { value: v })));
+}
 
 // --- утилиты ---------------------------------------------------------------
 
@@ -173,6 +202,7 @@ async function saveConnection(event, { resetHostKey = false } = {}) {
     });
     fillConnForm();
     $("sync-report").replaceChildren();
+    state.server = null;
     toast("Подключение сохранено");
   } catch (err) {
     toast(err.message, true);
@@ -211,6 +241,8 @@ let lastPlan = null;
 
 function renderSync(r) {
   lastPlan = r.applied ? null : r;
+  rememberServerPlan(r);
+  renderMods();
   const root = $("sync-report");
   const list = (items) => el("ul", {}, items.map(([cls, t]) => el("li", { class: cls, text: t })));
   const blocks = [];
@@ -274,6 +306,72 @@ async function runSync(apply) {
   }
 }
 
+// --- что лежит на сервере ---------------------------------------------------
+
+async function loadServerMods() {
+  if (!state.connection || state.server?.loading) return;
+  state.server = { loading: true };
+  renderMods();
+  try {
+    state.server = { plan: await api("/admin/server/sync"), at: new Date() };
+  } catch (err) {
+    state.server = { error: err.message };
+  }
+  renderMods();
+}
+
+// После «Применить» сервер совпадает с профилем — перечитывать не нужно.
+function rememberServerPlan(r) {
+  const plan = r.applied
+    ? { ...r, mods_ok: [...r.mods_ok, ...r.mods_upload].sort(), mods_upload: [], mods_remove: [] }
+    : r;
+  state.server = { plan, at: new Date() };
+}
+
+function serverModState(mod) {
+  const plan = state.server?.plan;
+  if (!plan || !matchesProfile(mod) || mod.server_side === false) return null;
+  if (plan.mods_ok.includes(mod.file_name)) return "ok";
+  if (plan.mods_upload.includes(mod.file_name)) return "missing";
+  return null; // добавлен после проверки
+}
+
+function renderServerBar() {
+  const bar = $("server-bar");
+  bar.className = "server-bar";
+  const s = state.server;
+  const p = state.profile;
+  let text;
+  const actions = [];
+  if (!state.connection) {
+    text = "Подключение к серверу не настроено, поэтому не видно, какие моды лежат у него в mods/.";
+    actions.push(el("a", { href: "#/server", text: "Настроить подключение" }));
+  } else if (p?.loader === "vanilla") {
+    text = "Профиль vanilla — папку mods/ на сервере админка не трогает.";
+  } else if (!s) {
+    text = "Не проверено, какие моды лежат на сервере.";
+    actions.push(el("button", { class: "btn btn-sm", type: "button", text: "Проверить сервер", onclick: loadServerMods }));
+  } else if (s.loading) {
+    text = "Смотрю папку mods/ на сервере…";
+  } else if (s.error) {
+    bar.classList.add("err");
+    text = `Не удалось прочитать сервер: ${s.error}`;
+    actions.push(el("button", { class: "btn btn-sm", type: "button", text: "Повторить", onclick: loadServerMods }));
+  } else {
+    const { mods_ok: ok, mods_upload: up, mods_remove: extra } = s.plan;
+    const time = s.at.toLocaleTimeString("ru", { hour: "2-digit", minute: "2-digit" });
+    text = el("span", {},
+      el("strong", { text: `На сервере ${ok.length + extra.length} ${plural(ok.length + extra.length, "мод", "мода", "модов")}` }),
+      up.length || extra.length
+        ? `: не залито ${up.length}, лишних ${extra.length}. `
+        : ": совпадает с профилем. ",
+      `Проверено в ${time}.`);
+    actions.push(el("button", { class: "btn btn-sm btn-ghost", type: "button", text: "Обновить", onclick: loadServerMods }));
+    if (up.length || extra.length) actions.push(el("a", { href: "#/server", class: "btn btn-sm", text: "Синхронизировать" }));
+  }
+  bar.replaceChildren(el("span", { class: "bar-text" }, text), ...actions);
+}
+
 function matchesProfile(mod) {
   const p = state.profile;
   return !!p && mod.loader.toLowerCase() === p.loader.toLowerCase() && mod.mc_version === p.mc_version;
@@ -285,6 +383,7 @@ function renderAll() {
   renderStrip();
   renderOverview();
   renderMods();
+  fillVersionHints();
   if (!profileEdited) fillProfileForm();
   const forProfile = state.mods.filter(matchesProfile).length;
   $("nav-mods-count").textContent = state.mods.length ? String(forProfile) : "";
@@ -365,8 +464,15 @@ function renderOverview() {
 }
 
 function renderMods() {
+  renderServerBar();
   const root = $("mods-list");
   root.replaceChildren();
+  const stray = (!$("mods-search").value.trim() && state.server?.plan?.mods_remove) || [];
+  const strayBlock = stray.length ? [
+    el("div", { class: "group-title" }, el("h2", { text: "Есть только на сервере" }), el("span", { class: "count", text: String(stray.length) })),
+    el("p", { class: "group-hint", text: "Лежат в mods/ сервера, но в профиле не числятся как серверные моды. При синхронизации переедут в mods_removed/. Нужный — загрузите сюда." }),
+    ...stray.map((name) => el("div", { class: "stray" }, el("span", { text: name }), el("span", { class: "badge badge-danger", text: "уйдёт в бэкап" }))),
+  ] : [];
   const query = $("mods-search").value.trim().toLowerCase();
   const showAll = $("mods-all-versions").checked;
 
@@ -379,8 +485,8 @@ function renderMods() {
     root.append(el("div", { class: "empty" },
       el("p", { text: query ? "Ничего не найдено" : hiddenOther ? "Для текущего профиля модов нет" : "Модов пока нет" }),
       el("p", { class: "small", text: hiddenOther && !query ? `Загружено для других версий: ${state.mods.length}. Включите «Показать и другие версии».` : "Загрузите jar-файлы — лаунчер скачает их игрокам." }),
-      query ? null : el("button", { class: "btn btn-primary", type: "button", text: "Добавить моды", onclick: openAddDialog }),
-    ));
+      query ? null : el("button", { class: "btn btn-primary", type: "button", text: "Загрузить файлы", onclick: openAddDialog }),
+    ), ...strayBlock);
     return;
   }
 
@@ -397,13 +503,15 @@ function renderMods() {
       ...items.map(modRow),
     );
   }
+  root.append(...strayBlock);
 }
 
 function modRow(mod) {
   const other = !matchesProfile(mod);
   const nameEl = el("div", { class: "name" }, mod.name,
     other ? el("span", { class: "badge", text: "другая версия" }) : null,
-    mod.server_side === false ? el("span", { class: "badge badge-muted", text: "только клиент" }) : null);
+    mod.server_side === false ? el("span", { class: "badge badge-muted", text: "только клиент" }) : null,
+    { ok: el("span", { class: "badge badge-ok", text: "на сервере" }), missing: el("span", { class: "badge", text: "не залит на сервер" }) }[serverModState(mod)] ?? null);
   return el("div", { class: other ? "mod other" : "mod" },
     el("div", {}, nameEl, el("div", { class: "file", text: mod.file_name })),
     el("div", { class: "meta", text: `${mod.loader} ${mod.mc_version} · ${formatSize(mod.size)}` }),
@@ -471,6 +579,7 @@ function modrinthRow(hit) {
       btn.textContent = "Добавлен";
       toast(names.length ? `Добавлено: ${names.join(", ")}` : `Уже есть: ${res.skipped.join(", ")}`);
       await refreshAll();
+      staleServer();
     } catch (err) {
       btn.disabled = false;
       btn.textContent = "Добавить";
@@ -652,6 +761,7 @@ function askDelete(mod) {
       toast(`Удалён: ${mod.name}`);
       await loadMods();
       renderAll();
+      staleServer();
     } catch (err) {
       toast(err.message, true);
     }
@@ -668,7 +778,7 @@ function editValues() {
     name: $("edit-name").value.trim(),
     description: $("edit-description").value.trim() || null,
     mod_type: editing.type,
-    loader: $("edit-loader").value.trim(),
+    loader: $("edit-loader").value,
     mc_version: $("edit-mc_version").value.trim(),
     server_side: $("edit-server_side").checked,
   };
@@ -681,7 +791,8 @@ function editChanges() {
   const orig = { ...editing.mod, description: editing.mod.description || null, server_side: editing.mod.server_side !== false };
   const changes = {};
   for (const key of Object.keys(values)) {
-    if (values[key] !== (orig[key] ?? null)) changes[key] = values[key];
+    const was = key === "loader" ? orig.loader.toLowerCase() : (orig[key] ?? null);
+    if (values[key] !== was) changes[key] = values[key];
   }
   return changes;
 }
@@ -699,7 +810,7 @@ function openEdit(mod) {
   $("edit-file").textContent = mod.file_name;
   $("edit-name").value = mod.name;
   $("edit-description").value = mod.description || "";
-  $("edit-loader").value = mod.loader;
+  setLoader($("edit-loader"), mod.loader);
   $("edit-mc_version").value = mod.mc_version;
   $("edit-server_side").checked = mod.server_side !== false;
   syncEdit();
@@ -721,6 +832,7 @@ async function saveEdit(event) {
     toast(`Сохранено: ${changes.name ?? editing.mod.name}`);
     await loadMods();
     renderAll();
+    staleServer();
   } catch (err) {
     toast(err.message, true);
     syncEdit();
@@ -742,7 +854,7 @@ function guessName(fileName) {
 function openAddDialog() {
   queue = [];
   bulkType = "required";
-  $("add-loader").value = state.profile?.loader && state.profile.loader !== "vanilla" ? state.profile.loader : (state.profile ? "forge" : "");
+  setLoader($("add-loader"), state.profile?.loader !== "vanilla" ? state.profile?.loader : "");
   $("add-mc_version").value = state.profile?.mc_version || "";
   syncBulkType();
   renderQueue();
@@ -858,6 +970,7 @@ async function submitUpload() {
   const failed = queue.filter((q) => q.status === "err").length;
   await loadMods();
   renderAll();
+  if (done) staleServer();
   if (!failed) {
     $("dlg-add").close();
     toast(`Загружено: ${done}`);
@@ -886,7 +999,7 @@ function fillProfileForm() {
   profileEdited = false;
   const p = state.profile;
   $("profile-mc_version").value = p?.mc_version ?? "";
-  $("profile-loader").value = p?.loader ?? "forge";
+  setLoader($("profile-loader"), p?.loader ?? "forge");
   $("profile-loader_version").value = p?.loader_version ?? "";
   $("profile-server_address").value = p?.server_address ?? "";
   $("profile-server_port").value = p?.server_port ?? 25565;
@@ -917,6 +1030,7 @@ async function saveProfile(event) {
       body: JSON.stringify(payload),
     });
     profileEdited = false;
+    state.server = null;
     renderAll();
     toast("Профиль сохранён");
   } catch (err) {
@@ -934,6 +1048,7 @@ function route() {
     if (link.dataset.route === page) link.setAttribute("aria-current", "page");
     else link.removeAttribute("aria-current");
   }
+  if (page === "mods" && !state.server && state.profile?.loader !== "vanilla") loadServerMods();
   if (page === "control") enterControl();
   else leaveControl();
 }
@@ -950,7 +1065,13 @@ async function enterMain() {
 
 // --- инициализация ---------------------------------------------------------
 
+// Набор модов поменялся — сверка с сервером устарела.
+function staleServer() {
+  if (state.server?.plan) loadServerMods();
+}
+
 function init() {
+  fillLoaderSelects();
   $("login-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     const errorEl = $("login-error");
@@ -1004,12 +1125,13 @@ function init() {
     syncBulkType();
     renderQueue();
   });
-  $("add-loader").addEventListener("input", updateSubmit);
+  $("add-loader").addEventListener("change", updateSubmit);
   $("add-mc_version").addEventListener("input", updateSubmit);
   $("add-submit").addEventListener("click", submitUpload);
 
   // редактирование
   $("edit-form").addEventListener("input", syncEdit);
+  $("edit-form").addEventListener("change", syncEdit);
   $("edit-form").addEventListener("submit", saveEdit);
   $("edit-type").addEventListener("click", (e) => {
     const btn = e.target.closest("button[data-type]");
@@ -1022,6 +1144,7 @@ function init() {
 
   // профиль
   $("profile-form").addEventListener("input", () => { profileEdited = true; onProfileInput(); });
+  $("profile-form").addEventListener("change", () => { profileEdited = true; onProfileInput(); });
   $("profile-form").addEventListener("submit", saveProfile);
   $("profile-reset").addEventListener("click", fillProfileForm);
 
