@@ -1,3 +1,5 @@
+import hashlib
+
 from app.core.config import settings
 
 
@@ -17,8 +19,9 @@ async def test_authlib_jars_lists_matching_files_only(client, tmp_path, monkeypa
     (tmp_path / "readme.txt").write_text("not a jar")
 
     resp = await client.get("/api/v1/launcher/authlib-jars")
+    digest = hashlib.sha256(b"fake jar").hexdigest()
     assert resp.status_code == 200
     assert resp.json() == [
-        {"version": "4.0.43", "url": "http://backend.example/authlib-files/authlib-4.0.43_skinfix.jar"},
-        {"version": "6.0.54", "url": "http://backend.example/authlib-files/authlib-6.0.54_skinfix.jar"},
+        {"version": "4.0.43", "url": "http://backend.example/authlib-files/authlib-4.0.43_skinfix.jar", "sha256": digest},
+        {"version": "6.0.54", "url": "http://backend.example/authlib-files/authlib-6.0.54_skinfix.jar", "sha256": digest},
     ]

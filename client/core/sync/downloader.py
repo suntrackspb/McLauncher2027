@@ -36,18 +36,23 @@ def _download_one(
     tmp_path = dest.with_name(dest.name + ".part")
     digest = hashlib.sha256()
 
-    with session.get(entry.url, stream=True, timeout=30) as resp:
-        resp.raise_for_status()
-        downloaded = 0
-        with tmp_path.open("wb") as f:
-            for chunk in resp.iter_content(chunk_size=64 * 1024):
-                if not chunk:
-                    continue
-                f.write(chunk)
-                digest.update(chunk)
-                downloaded += len(chunk)
-                if reporter:
-                    reporter.progress(downloaded, entry.size)
+    try:
+        with session.get(entry.url, stream=True, timeout=30) as resp:
+            resp.raise_for_status()
+            downloaded = 0
+            with tmp_path.open("wb") as f:
+                for chunk in resp.iter_content(chunk_size=64 * 1024):
+                    if not chunk:
+                        continue
+                    f.write(chunk)
+                    digest.update(chunk)
+                    downloaded += len(chunk)
+                    if reporter:
+                        reporter.progress(downloaded, entry.size)
+    except BaseException:
+        # Обрыв сети — не оставляем недокачанный .part в папке модов.
+        tmp_path.unlink(missing_ok=True)
+        raise
 
     if digest.hexdigest() != entry.file_hash:
         tmp_path.unlink(missing_ok=True)

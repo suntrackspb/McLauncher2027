@@ -107,3 +107,29 @@ def test_patch_handles_multiple_versions_independently(tmp_path, mocker):
     b = mc_dir / "libraries" / "com" / "mojang" / "authlib" / "6.0.54" / "authlib-6.0.54.jar"
     assert a.read_bytes() == b"patched-a"
     assert b.read_bytes() == b"original-b"
+
+
+def test_patch_redownloads_when_cached_hash_is_stale(tmp_path, mocker):
+    import hashlib
+
+    mc_dir = tmp_path / "mc"
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+    _make_authlib_jar(mc_dir, "3.11.49", b"original-bytes")
+    (cache_dir / "authlib-3.11.49_skinfix.jar").write_bytes(b"old-backend-url")
+
+    api_client = _api_client_with_jars(
+        [{
+            "version": "3.11.49",
+            "url": "http://backend.example/authlib-files/authlib-3.11.49_skinfix.jar",
+            "sha256": hashlib.sha256(b"new-backend-url").hexdigest(),
+        }]
+    )
+    response = MagicMock(content=b"new-backend-url")
+    response.raise_for_status.return_value = None
+    mock_get = mocker.patch("core.launch.authlib_patch.requests.get", return_value=response)
+
+    patch_authlib_jars(mc_dir, api_client, cache_dir)
+
+    mock_get.assert_called_once()
+    assert (cache_dir / "authlib-3.11.49_skinfix.jar").read_bytes() == b"new-backend-url"

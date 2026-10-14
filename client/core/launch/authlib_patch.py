@@ -1,3 +1,4 @@
+import hashlib
 import re
 import shutil
 from pathlib import Path
@@ -10,6 +11,10 @@ from core.api_client.client import ApiClient
 _AUTHLIB_JAR_RE = re.compile(r"^authlib-(?P<version>[0-9][0-9.]*)\.jar$")
 
 _DOWNLOAD_TIMEOUT_SECONDS = 60
+
+
+def _sha256(content: bytes) -> str:
+    return hashlib.sha256(content).hexdigest()
 
 
 def find_authlib_jars(minecraft_directory: str | Path) -> list[Path]:
@@ -43,19 +48,24 @@ def patch_authlib_jars(
 
     cache_dir = Path(cache_dir)
     cache_dir.mkdir(parents=True, exist_ok=True)
-    available = {jar["version"]: jar["url"] for jar in api_client.get_authlib_jars()}
+    available = {jar["version"]: jar for jar in api_client.get_authlib_jars()}
 
     patched: list[Path] = []
     for original in originals:
         version = _AUTHLIB_JAR_RE.match(original.name).group("version")
-        url = available.get(version)
-        if not url:
+        jar = available.get(version)
+        if not jar:
             continue
 
+        # sha256 от сервера: если jar перепатчили (сменился адрес бэкенда),
+        # кэш устарел — качаем заново. Старый сервер без sha256 — как раньше.
+        expected = jar.get("sha256")
         cached = cache_dir / f"authlib-{version}_skinfix.jar"
-        if not cached.is_file():
-            response = requests.get(url, timeout=_DOWNLOAD_TIMEOUT_SECONDS)
+        if not cached.is_file() or (expected and _sha256(cached.read_bytes()) != expected):
+            response = requests.get(jar["url"], timeout=_DOWNLOAD_TIMEOUT_SECONDS)
             response.raise_for_status()
+            if expected and _sha256(response.content) != expected:
+                raise RuntimeError(f"authlib {version}: хеш скачанного файла не совпал с сервером")
             cached.write_bytes(response.content)
 
         shutil.copyfile(cached, original)

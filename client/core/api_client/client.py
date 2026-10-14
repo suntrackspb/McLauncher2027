@@ -31,11 +31,23 @@ class ApiClient:
             "/api/v1/auth/login", {"username": username, "password": password}, expected=200
         )
 
+    def resolve_url(self, url: str) -> str:
+        """Бэкенд без PUBLIC_BASE_URL отдаёт относительные ссылки — достраиваем
+        их от адреса бэкенда. Абсолютные остаются как есть."""
+        return urljoin(self.base_url + "/", url)
+
+    def _with_resolved_urls(self, items: list[dict]) -> list[dict]:
+        return [{**item, "url": self.resolve_url(item["url"])} for item in items]
+
     def get_required_mods(self, loader: str, mc_version: str) -> list[dict]:
-        return self._get("/api/v1/mods/manifest", {"loader": loader, "mc_version": mc_version})
+        return self._with_resolved_urls(
+            self._get("/api/v1/mods/manifest", {"loader": loader, "mc_version": mc_version})
+        )
 
     def get_optional_mods(self, loader: str, mc_version: str) -> list[dict]:
-        return self._get("/api/v1/mods/optional", {"loader": loader, "mc_version": mc_version})
+        return self._with_resolved_urls(
+            self._get("/api/v1/mods/optional", {"loader": loader, "mc_version": mc_version})
+        )
 
     def get_launcher_version(self) -> dict:
         return self._get_dict("/api/v1/launcher/version")
@@ -44,7 +56,7 @@ class ApiClient:
         return self._get_dict("/api/v1/launcher/profile")
 
     def get_authlib_jars(self) -> list[dict]:
-        return self._get("/api/v1/launcher/authlib-jars", {})
+        return self._with_resolved_urls(self._get("/api/v1/launcher/authlib-jars", {}))
 
     def upload_texture(self, kind: str, uuid: str, access_token: str, content: bytes) -> dict:
         """kind — "skin" или "cape" (POST /api/v1/players/me/{kind})."""
@@ -95,8 +107,7 @@ class ApiClient:
         return {}
 
     def download_bytes(self, url: str) -> bytes:
-        # Бэкенд без PUBLIC_BASE_URL отдаёт относительные ссылки — достраиваем.
-        url = urljoin(self.base_url + "/", url)
+        url = self.resolve_url(url)
         try:
             resp = self._session.get(url, timeout=self.timeout)
         except requests.RequestException as exc:

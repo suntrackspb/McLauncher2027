@@ -378,3 +378,18 @@ def test_open_game_folder_creates_and_opens(tmp_path, mocker):
     assert api.open_game_folder() == {"ok": True}
     assert (tmp_path / "mc").is_dir()
     assert popen.called or startfile.called
+
+
+def test_save_settings_clamps_and_ignores_garbage(tmp_path, mocker):
+    api = _api_with_tmp_settings(tmp_path, mocker)
+    before = api.get_settings()
+    saved = api.save_settings({"ram_mb": 999999, "resolution_width": 0, "resolution_height": "abc"})
+    assert saved["ram_mb"] == 65536
+    assert saved["resolution_width"] == before["resolution_width"]
+    assert saved["resolution_height"] == before["resolution_height"]
+
+
+def test_logout_refused_while_launch_busy(tmp_path, mocker):
+    api = _api_with_tmp_settings(tmp_path, mocker)
+    api._launch_busy = True
+    assert api.logout()["ok"] is False

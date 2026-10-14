@@ -188,7 +188,10 @@ function renderMods(mods) {
     checkbox.addEventListener("change", async () => {
       checkbox.disabled = true;
       try {
-        await window.pywebview.api.toggle_optional_mod(mod.id, checkbox.checked);
+        const result = await window.pywebview.api.toggle_optional_mod(mod.id, checkbox.checked);
+        if (!result || !result.ok) checkbox.checked = !checkbox.checked;
+      } catch (err) {
+        checkbox.checked = !checkbox.checked;
       } finally {
         checkbox.disabled = false;
       }
@@ -285,7 +288,12 @@ async function renderUserHead(dataUrl) {
     }));
     return;
   }
-  const img = await loadImage(dataUrl);
+  let img;
+  try {
+    img = await loadImage(dataUrl);
+  } catch (err) {
+    return renderUserHead(null);
+  }
   const scale = img.width / 64;
   // лицо (8,8) и поверх — слой шапки/волос (40,8), как в игре
   ctx.drawImage(img, 8 * scale, 8 * scale, 8 * scale, 8 * scale, 0, 0, 8, 8);
@@ -294,8 +302,12 @@ async function renderUserHead(dataUrl) {
 
 async function loadUserHead() {
   await renderUserHead(null);
-  const result = await window.pywebview.api.get_textures();
-  if (result.ok) await renderUserHead(result.data.skin);
+  try {
+    const result = await window.pywebview.api.get_textures();
+    if (result.ok) await renderUserHead(result.data.skin);
+  } catch (err) {
+    // голова Стива уже нарисована
+  }
 }
 
 async function renderSkinPreview(dataUrl) {
@@ -344,14 +356,18 @@ function setTextureStatus(text) {
 
 async function loadTextures() {
   setTextureStatus("Загрузка…");
-  const result = await window.pywebview.api.get_textures();
-  if (!result.ok) {
-    setTextureStatus(`Ошибка: ${result.error}`);
-    return;
+  try {
+    const result = await window.pywebview.api.get_textures();
+    if (!result.ok) {
+      setTextureStatus(`Ошибка: ${result.error}`);
+      return;
+    }
+    setTextureStatus("");
+    await renderSkinPreview(result.data.skin);
+    await renderCapePreview(result.data.cape);
+  } catch (err) {
+    setTextureStatus("Ошибка: не удалось показать текстуры");
   }
-  setTextureStatus("");
-  await renderSkinPreview(result.data.skin);
-  await renderCapePreview(result.data.cape);
 }
 
 async function uploadTexture(kind, button) {
@@ -371,6 +387,8 @@ async function uploadTexture(kind, button) {
       await renderCapePreview(result.data_url);
       setTextureStatus("Плащ обновлён");
     }
+  } catch (err) {
+    setTextureStatus("Ошибка: файл загружен, но не удалось его показать");
   } finally {
     button.disabled = false;
   }
@@ -422,6 +440,7 @@ async function saveSettingsFromPanel() {
     game_arguments_extra: document.getElementById("input-game-args").value.trim(),
     debug: document.getElementById("input-debug").checked,
   };
+  // Пустые/кривые числа мост заменит прежними значениями или зажмёт в границы.
   await window.pywebview.api.save_settings(payload);
   closeAllPanels();
 }
@@ -479,7 +498,11 @@ function initEventHandlers() {
   });
 
   document.getElementById("btn-logout").addEventListener("click", async () => {
-    await window.pywebview.api.logout();
+    const result = await window.pywebview.api.logout();
+    if (result && !result.ok) {
+      alert(result.error);
+      return;
+    }
     setAuthError("");
     document.getElementById("form-login").reset();
     document.getElementById("form-register").reset();
@@ -600,7 +623,12 @@ let pendingUpdateUrl = null;
 let pendingUpdaterUrl = null;
 
 async function checkForUpdate() {
-  const result = await window.pywebview.api.check_for_update();
+  let result;
+  try {
+    result = await window.pywebview.api.check_for_update();
+  } catch (err) {
+    return; // проверка обновлений не должна мешать работе
+  }
   if (!result.ok || !result.update_available) {
     return;
   }
@@ -621,7 +649,8 @@ function initUpdateBanner() {
     const result = await window.pywebview.api.start_update(pendingUpdateUrl, pendingUpdaterUrl);
     if (!result.ok) {
       event.target.disabled = false;
-      setAuthError(result.error);
+      // Баннер виден на любом экране, форма входа — нет.
+      document.getElementById("update-banner-text").textContent = `Ошибка обновления: ${result.error}`;
     }
   });
 }

@@ -100,10 +100,27 @@ class LauncherApi:
     def get_settings(self) -> dict:
         return asdict(self._settings_store.load())
 
+    # Границы числовых настроек: пустое поле в UI даёт 0, а -Xmx0M или окно
+    # 0x0 ломают запуск игры.
+    _INT_LIMITS = {
+        "ram_mb": (512, 65536),
+        "resolution_width": (320, 7680),
+        "resolution_height": (240, 4320),
+    }
+
     def save_settings(self, data: dict) -> dict:
         current = self._settings_store.load()
-        known_fields = asdict(current).keys()
-        updated = replace(current, **{k: v for k, v in data.items() if k in known_fields})
+        values = {k: v for k, v in data.items() if k in asdict(current)}
+        for key, (low, high) in self._INT_LIMITS.items():
+            if key not in values:
+                continue
+            try:
+                number = int(values[key])
+            except (TypeError, ValueError):
+                number = 0
+            # Мусор/ноль — оставляем прежнее значение, иначе зажимаем в границы.
+            values[key] = min(max(number, low), high) if number > 0 else getattr(current, key)
+        updated = replace(current, **values)
         self._settings_store.save(updated)
         return asdict(updated)
 
@@ -191,7 +208,11 @@ class LauncherApi:
         return {"ok": True, "data": self._session}
 
     def logout(self) -> dict:
-        self._session = None
+        # Поток запуска читает self._session — пока он идёт, выходить нельзя.
+        with self._launch_lock:
+            if self._launch_busy:
+                return {"ok": False, "error": "Нельзя выйти, пока идёт запуск или открыта игра"}
+            self._session = None
         self._session_store.clear()
         return {"ok": True}
 
@@ -287,7 +308,10 @@ class LauncherApi:
         ids = set(settings.enabled_optional_mod_ids)
         ids.add(mod_id) if enabled else ids.discard(mod_id)
         settings.enabled_optional_mod_ids = sorted(ids)
-        self._settings_store.save(settings)
+        try:
+            self._settings_store.save(settings)
+        except OSError as exc:
+            return {"ok": False, "error": f"Не удалось сохранить настройки: {exc}"}
         return {"ok": True}
 
     # --- запуск игры -----------------------------------------------------
