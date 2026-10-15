@@ -30,8 +30,17 @@ _authlib_dir = Path(settings.authlib_storage_dir)
 _authlib_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/authlib-files", StaticFiles(directory=_authlib_dir), name="authlib-files")
 
+class _RevalidatedStaticFiles(StaticFiles):
+    """Админка меняется вместе с бэкендом — браузер должен перепроверять файлы (Safari иначе держит старые)."""
+
+    def file_response(self, *args, **kwargs):
+        response = super().file_response(*args, **kwargs)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 _admin_ui_dir = Path(__file__).resolve().parent / "static" / "admin"
-app.mount("/admin", StaticFiles(directory=_admin_ui_dir, html=True), name="admin-ui")
+app.mount("/admin", _RevalidatedStaticFiles(directory=_admin_ui_dir, html=True), name="admin-ui")
 
 
 @app.get("/health")
