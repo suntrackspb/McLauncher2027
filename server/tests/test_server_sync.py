@@ -228,3 +228,27 @@ async def test_apply_rejects_stale_plan(client, ftp_server, ftp_root):
     fresh = (await client.get("/api/v1/admin/server/sync", headers=headers)).json()
     ok = await client.post("/api/v1/admin/server/sync", headers=headers, json={"plan_id": fresh["plan_id"]})
     assert ok.status_code == 200 and ok.json()["applied"] is True
+
+
+def test_properties_escaping_roundtrip():
+    text = "#c\nmotd=A Minecraft Server\\u0021\nlevel-name=world\n"
+    assert server_control_service.parse_properties(text)["motd"] == "A Minecraft Server!"
+    out = server_control_service.set_properties(text, {"motd": "Привет: мир=1"})
+    assert "Привет" not in out  # не-ASCII уходит в \uXXXX
+    assert server_control_service.parse_properties(out)["motd"] == "Привет: мир=1"
+
+
+async def test_ftp_properties_edit(client, ftp_server, ftp_root):
+    headers = await _admin(client)
+    await _connect(client, headers, ftp_server)
+    (ftp_root / "server.properties").write_text("#c\npvp=true\nmotd=hi\n")
+    got = (await client.get("/api/v1/admin/server/properties", headers=headers)).json()
+    assert got["exists"] is True and got["values"] == {"pvp": "true", "motd": "hi"}
+
+    resp = await client.put("/api/v1/admin/server/properties", headers=headers,
+                            json={"updates": {"pvp": "false", "max-players": "10"}})
+    assert resp.json()["values"]["max-players"] == "10"
+    assert (ftp_root / "server.properties").read_text() == "#c\npvp=false\nmotd=hi\nmax-players=10\n"
+
+    bad = await client.put("/api/v1/admin/server/properties", headers=headers, json={"updates": {"motd": "a\nb"}})
+    assert bad.status_code == 400

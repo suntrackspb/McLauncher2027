@@ -6,90 +6,179 @@
   <title>McLauncher2027 — админка</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Onest:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Unbounded:wght@500;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <section id="screen-login" class="login" hidden>
     <form id="login-form" class="login-card">
+      <div class="lamp lamp-big active" aria-hidden="true"></div>
       <h1>McLauncher2027</h1>
-      <p class="muted">Вход в админку</p>
+      <p class="muted">Админка сервера</p>
       <label class="field">Пароль администратора
         <input type="password" id="login-password" required autofocus autocomplete="current-password" />
       </label>
       <p id="login-error" class="error-text" role="alert" hidden></p>
-      <button type="submit" class="btn btn-primary">Войти</button>
+      <button type="submit" class="btn btn-primary btn-block">Войти</button>
     </form>
   </section>
 
   <div id="screen-main" class="shell" hidden>
     <aside class="sidebar">
-      <div class="brand">McLauncher2027</div>
+      <div class="brand">McLauncher<span>2027</span></div>
       <nav id="nav" aria-label="Разделы">
         <a href="#/overview" data-route="overview">Обзор</a>
-        <a href="#/mods" data-route="mods">Моды <span class="count" id="nav-mods-count"></span></a>
-        <a href="#/server" data-route="server">Сервер</a>
-        <a href="#/control" data-route="control">Управление</a>
+        <a href="#/mods" data-route="mods">Моды <span class="nav-badge" id="nav-mods-badge"></span></a>
+        <a href="#/console" data-route="console">Консоль</a>
+        <a href="#/properties" data-route="properties">Параметры игры</a>
+        <a href="#/settings" data-route="settings">Подключение <span class="nav-badge warn" id="nav-settings-badge"></span></a>
       </nav>
-      <button id="btn-logout" class="btn btn-ghost sidebar-foot" type="button">Выйти</button>
+      <button id="btn-logout" class="btn btn-ghost btn-sm sidebar-foot" type="button">Выйти</button>
     </aside>
 
     <div class="content">
-      <div class="profile-strip" id="profile-strip" aria-live="polite"></div>
+      <!-- Строка статуса сервера: видна на всех страницах -->
+      <header class="statusbar" id="statusbar">
+        <div class="lamp" id="sb-lamp" aria-hidden="true"></div>
+        <div class="sb-main">
+          <div class="sb-state" id="sb-state" aria-live="polite">Сервер</div>
+          <div class="sb-sub" id="sb-sub"></div>
+        </div>
+        <div class="sb-actions" id="sb-actions" hidden>
+          <button type="button" class="btn btn-sm" data-action="start">Запустить</button>
+          <button type="button" class="btn btn-sm" data-action="restart">Перезапустить</button>
+          <button type="button" class="btn btn-sm btn-danger" data-action="stop">Остановить</button>
+        </div>
+        <button type="button" class="btn btn-ghost btn-sm" id="sb-refresh" aria-label="Обновить статус">Обновить</button>
+      </header>
 
       <main>
         <!-- Обзор -->
         <section class="page" data-page="overview" hidden>
-          <h1>Обзор</h1>
-          <p class="muted lead">Всё ли готово, чтобы игроки зашли на сервер через лаунчер.</p>
+          <div class="page-head">
+            <div>
+              <h1>Обзор</h1>
+              <p class="lead">Всё ли готово, чтобы игроки зашли через лаунчер.</p>
+            </div>
+          </div>
           <ul class="checks" id="checks"></ul>
         </section>
 
         <!-- Моды -->
         <section class="page" data-page="mods" hidden>
           <div class="page-head">
-            <h1>Моды</h1>
+            <div>
+              <h1>Моды</h1>
+              <p class="lead" id="mods-lead"></p>
+            </div>
             <div class="head-actions">
               <button class="btn" id="btn-modrinth" type="button">Найти на Modrinth</button>
-              <button class="btn btn-primary" id="btn-add-mods" type="button">Загрузить файлы</button>
+              <button class="btn btn-primary" id="btn-add-mods" type="button">Загрузить jar</button>
             </div>
           </div>
 
+          <!-- Сверка и заливка на сервер -->
+          <section class="sync" id="sync" aria-live="polite">
+            <div class="sync-head">
+              <div class="sync-text" id="sync-text"></div>
+              <div class="sync-actions" id="sync-actions"></div>
+            </div>
+            <div class="sync-body" id="sync-body" hidden></div>
+          </section>
+
           <div class="toolbar">
-            <input type="search" id="mods-search" placeholder="Поиск по названию или файлу" aria-label="Поиск модов" />
+            <input type="search" id="mods-search" placeholder="Найти среди загруженных" aria-label="Поиск модов" />
+            <div class="segmented" id="mods-filter" role="group" aria-label="Тип модов">
+              <button type="button" data-filter="all" aria-pressed="true">Все</button>
+              <button type="button" data-filter="required" aria-pressed="false">Обязательные</button>
+              <button type="button" data-filter="optional" aria-pressed="false">Необязательные</button>
+            </div>
             <label class="switch">
               <input type="checkbox" id="mods-all-versions" />
-              <span>Показать и другие версии</span>
+              <span>Другие версии</span>
             </label>
           </div>
 
-          <div class="server-bar" id="server-bar" aria-live="polite"></div>
-
-          <div id="mods-list"></div>
+          <div id="mods-list" class="mod-list"></div>
         </section>
 
-        <!-- Сервер -->
-        <section class="page" data-page="server" hidden>
-          <h1>Сервер</h1>
-          <p class="muted lead">С этим профилем лаунчер ставит Minecraft и подключается к серверу.</p>
+        <!-- Консоль -->
+        <section class="page" data-page="console" hidden>
+          <div class="page-head">
+            <div>
+              <h1>Консоль</h1>
+              <p class="lead" id="console-hint">Лог сервера и команды через RCON.</p>
+            </div>
+            <label class="switch"><input type="checkbox" id="log-follow" checked /> <span>Следить за логом</span></label>
+          </div>
 
-          <form id="profile-form" class="panel form-grid" novalidate>
-            <label class="field">Версия Minecraft
-              <input type="text" id="profile-mc_version" required placeholder="1.21" class="mono" list="mc-versions" autocomplete="off" />
-            </label>
-            <label class="field">Загрузчик
-              <select id="profile-loader" data-loaders="vanilla"></select>
-            </label>
-            <label class="field" id="field-loader-version">Версия загрузчика
-              <input type="text" id="profile-loader_version" placeholder="51.0.33" class="mono" />
-            </label>
-            <label class="field">Адрес сервера
-              <input type="text" id="profile-server_address" required placeholder="192.168.1.183" class="mono" />
-            </label>
-            <label class="field">Порт
-              <input type="number" id="profile-server_port" required min="1" max="65535" placeholder="25565" class="mono" />
-            </label>
+          <div class="terminal">
+            <pre class="term-log" id="log-output" tabindex="0" aria-label="Лог сервера"></pre>
+            <pre class="term-rcon" id="rcon-output" aria-live="polite" hidden></pre>
+            <form id="rcon-form" class="term-input" hidden>
+              <span class="prompt" aria-hidden="true">&gt;</span>
+              <input type="text" id="rcon-input" placeholder="list, say Привет, op Ник, time set day" autocomplete="off" spellcheck="false" aria-label="Команда сервера" />
+              <button class="btn btn-sm btn-primary" type="submit">Отправить</button>
+            </form>
+            <div class="term-off" id="rcon-off" hidden>
+              <span>Команды недоступны: RCON выключен в server.properties.</span>
+              <button type="button" class="btn btn-sm" id="rcon-enable">Включить RCON</button>
+            </div>
+          </div>
+        </section>
 
+        <!-- Параметры игры -->
+        <section class="page" data-page="properties" hidden>
+          <div class="page-head">
+            <div>
+              <h1>Параметры игры</h1>
+              <p class="lead" id="props-lead">Файл server.properties на сервере.</p>
+            </div>
+            <input type="search" id="props-search" class="head-search" placeholder="Найти параметр" aria-label="Поиск параметра" />
+          </div>
+          <div id="props-root"></div>
+
+          <div class="savebar" id="props-savebar" hidden>
+            <span id="props-dirty"></span>
+            <button type="button" class="btn btn-ghost btn-sm" id="props-reset">Отменить</button>
+            <button type="button" class="btn btn-sm" id="props-save">Сохранить</button>
+            <button type="button" class="btn btn-sm btn-primary" id="props-save-restart" hidden>Сохранить и перезапустить</button>
+          </div>
+        </section>
+
+        <!-- Подключение -->
+        <section class="page" data-page="settings" hidden>
+          <div class="page-head">
+            <div>
+              <h1>Подключение</h1>
+              <p class="lead">Что ставит лаунчер игрокам и как админка достаёт до файлов сервера.</p>
+            </div>
+          </div>
+
+          <form id="profile-form" class="card" novalidate>
+            <div class="card-head">
+              <h2>Профиль сервера</h2>
+              <p>С ним лаунчер ставит Minecraft и подключается к серверу.</p>
+            </div>
+            <div class="form-grid">
+              <label class="field">Версия Minecraft
+                <input type="text" id="profile-mc_version" required placeholder="1.21" class="mono" list="mc-versions" autocomplete="off" />
+              </label>
+              <label class="field">Загрузчик
+                <select id="profile-loader" data-loaders="vanilla"></select>
+              </label>
+              <label class="field" id="field-loader-version">Версия загрузчика
+                <input type="text" id="profile-loader_version" placeholder="51.0.33" class="mono" />
+              </label>
+              <div class="field-pair">
+                <label class="field">Адрес для игроков
+                  <input type="text" id="profile-server_address" required placeholder="play.example.ru" class="mono" />
+                </label>
+                <label class="field field-port">Порт
+                  <input type="number" id="profile-server_port" required min="1" max="65535" placeholder="25565" class="mono" />
+                </label>
+              </div>
+            </div>
             <p class="notice" id="profile-notice" hidden>
               После сохранения лаунчеры игроков при следующем запуске заново поставят Minecraft под этот профиль.
             </p>
@@ -99,118 +188,66 @@
             </div>
           </form>
 
-          <h2 class="section-title">Подключение к серверу</h2>
-          <p class="muted small">Через него админка кладёт на сервер моды из профиля и наш authlib. FTP — если сервер у хостера с панелью (сам сервер ставит панель). SFTP — свой сервер с доступом по SSH.</p>
-          <form id="conn-form" class="panel form-grid" novalidate autocomplete="off">
-            <label class="field">Протокол
-              <select id="conn-protocol">
-                <option value="sftp">SFTP (SSH)</option>
-                <option value="ftp">FTP</option>
-                <option value="ftps">FTPS (FTP + TLS)</option>
-              </select>
-            </label>
-            <div class="two-cols">
-              <label class="field">Хост
-                <input type="text" id="conn-host" required class="mono" placeholder="192.168.1.10" />
+          <form id="conn-form" class="card" novalidate autocomplete="off">
+            <div class="card-head">
+              <h2>Доступ к файлам сервера</h2>
+              <p>Нужен для заливки модов, логов, консоли и параметров игры. FTP — сервер у хостера с панелью, SFTP — свой сервер с SSH.</p>
+            </div>
+            <div class="form-grid">
+              <label class="field">Протокол
+                <select id="conn-protocol">
+                  <option value="sftp">SFTP (SSH)</option>
+                  <option value="ftp">FTP</option>
+                  <option value="ftps">FTPS (FTP + TLS)</option>
+                </select>
               </label>
-              <label class="field">Порт
-                <input type="number" id="conn-port" min="1" max="65535" class="mono" placeholder="22" />
+              <div class="field-pair">
+                <label class="field">Хост
+                  <input type="text" id="conn-host" required class="mono" placeholder="192.168.1.10" />
+                </label>
+                <label class="field field-port">Порт
+                  <input type="number" id="conn-port" min="1" max="65535" class="mono" placeholder="22" />
+                </label>
+              </div>
+              <label class="field">Пользователь
+                <input type="text" id="conn-username" required class="mono" autocomplete="off" />
+              </label>
+              <label class="field">Пароль
+                <input type="password" id="conn-password" class="mono" autocomplete="new-password" />
+              </label>
+              <label class="field full">Папка сервера, где лежат mods/ и server.properties
+                <input type="text" id="conn-server_dir" required class="mono" placeholder="/opt/minecraft/forge" />
+              </label>
+              <label class="field full" id="field-conn-key">Приватный SSH-ключ вместо пароля
+                <textarea id="conn-key" rows="3" class="mono" spellcheck="false" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"></textarea>
+              </label>
+              <label class="field full" id="field-conn-service">systemd-сервис для запуска и остановки
+                <input type="text" id="conn-service_name" class="mono" placeholder="пусто — найду по папке сервера" />
               </label>
             </div>
-            <label class="field">Пользователь
-              <input type="text" id="conn-username" required class="mono" autocomplete="off" />
-            </label>
-            <label class="field">Пароль
-              <input type="password" id="conn-password" class="mono" autocomplete="new-password" />
-            </label>
-            <label class="field full" id="field-conn-key">Приватный SSH-ключ (вместо пароля)
-              <textarea id="conn-key" rows="3" class="mono" spellcheck="false" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"></textarea>
-            </label>
-            <label class="field full" id="field-conn-service">systemd-сервис сервера (для старт/стоп/рестарт)
-              <input type="text" id="conn-service_name" class="mono" placeholder="пусто — найти по папке сервера" />
-            </label>
-            <label class="field full">Папка сервера (там, где mods/ и server.properties)
-              <input type="text" id="conn-server_dir" required class="mono" placeholder="/opt/minecraft/forge" />
-            </label>
-            <p class="muted small full" id="conn-secrets-hint" hidden></p>
-            <p class="muted small full mono" id="conn-hostkey" hidden></p>
+            <p class="hint" id="conn-secrets-hint" hidden></p>
+            <p class="hint mono" id="conn-hostkey" hidden></p>
             <div class="form-actions">
               <button type="submit" class="btn btn-primary" id="conn-save">Сохранить</button>
               <button type="button" class="btn" id="conn-test" disabled>Проверить подключение</button>
               <button type="button" class="btn btn-ghost" id="conn-reset-key" hidden>Сбросить ключ хоста</button>
             </div>
           </form>
-
-          <h2 class="section-title">Синхронизация с сервером</h2>
-          <p class="muted small">Сначала покажу, что изменится. Лишние моды не удаляются, а уходят в <span class="mono">mods_removed/</span>, оригинальный authlib сохраняется рядом как <span class="mono">.orig</span>. После применения перезапустите сервер.</p>
-          <div class="panel">
-            <div class="form-actions">
-              <button type="button" class="btn" id="sync-plan" disabled>Проверить, что изменится</button>
-              <button type="button" class="btn btn-primary" id="sync-apply" disabled>Применить</button>
-            </div>
-            <div id="sync-report" class="sync-report"></div>
-          </div>
-        </section>
-
-        <!-- Управление -->
-        <section class="page" data-page="control" hidden>
-          <div class="page-head">
-            <h1>Управление</h1>
-            <button class="btn btn-ghost" id="ctl-refresh" type="button">Обновить</button>
-          </div>
-          <p class="muted lead" id="ctl-hint">Статус, лог и консоль игрового сервера.</p>
-
-          <div class="panel ctl-status">
-            <div>
-              <div class="muted small">Сервер</div>
-              <div class="ctl-state" id="ctl-state">—</div>
-              <div class="muted small" id="ctl-players"></div>
-            </div>
-            <div class="form-actions" id="ctl-actions" hidden>
-              <button type="button" class="btn" data-action="start">Старт</button>
-              <button type="button" class="btn" data-action="restart">Рестарт</button>
-              <button type="button" class="btn btn-danger" data-action="stop">Стоп</button>
-            </div>
-          </div>
-
-          <h2 class="section-title">Консоль (RCON)</h2>
-          <div class="panel">
-            <div id="rcon-off" hidden>
-              <p class="muted small">RCON выключен в server.properties. Включу его со случайным паролем — понадобится перезапуск сервера.</p>
-              <button type="button" class="btn" id="rcon-enable">Включить RCON</button>
-            </div>
-            <div id="rcon-on" hidden>
-              <pre class="console" id="rcon-output" aria-live="polite"></pre>
-              <form id="rcon-form" class="mr-search">
-                <input type="search" id="rcon-input" class="mono" placeholder="list, say Привет, op Ник, time set day" autocomplete="off" aria-label="Команда сервера" />
-                <button class="btn btn-primary" type="submit">Отправить</button>
-              </form>
-            </div>
-          </div>
-
-          <h2 class="section-title">Лог сервера</h2>
-          <div class="panel">
-            <div class="toolbar">
-              <label class="switch"><input type="checkbox" id="log-follow" /> <span>Обновлять каждые 3 с</span></label>
-              <button type="button" class="btn btn-sm" id="log-refresh">Обновить лог</button>
-            </div>
-            <pre class="console console-log" id="log-output"></pre>
-          </div>
         </section>
       </main>
     </div>
   </div>
 
-  <!-- Добавление модов -->
+  <!-- Загрузка jar -->
   <dialog id="dlg-add" class="dialog dialog-wide">
     <form method="dialog" class="dialog-head">
-      <h2>Добавить моды</h2>
-      <button class="btn btn-ghost" value="close" aria-label="Закрыть">Закрыть</button>
+      <h2>Загрузить jar</h2>
+      <button class="btn btn-ghost btn-sm" value="close">Закрыть</button>
     </form>
 
     <div id="dropzone" class="dropzone" tabindex="0" role="button" aria-label="Выбрать jar-файлы">
       <p><strong>Перетащите .jar сюда</strong> или нажмите, чтобы выбрать</p>
-      <p class="muted small">Можно сразу несколько файлов</p>
+      <p class="muted small">Можно несколько файлов сразу</p>
       <input type="file" id="file-input" accept=".jar" multiple hidden />
     </div>
 
@@ -237,30 +274,34 @@
     </div>
   </dialog>
 
-  <!-- Редактирование -->
+  <!-- Modrinth -->
   <dialog id="dlg-modrinth" class="dialog dialog-wide">
     <form method="dialog" class="dialog-head">
-      <h2>Моды с Modrinth</h2>
-      <button class="btn btn-ghost" value="close" aria-label="Закрыть">Закрыть</button>
+      <h2>Modrinth</h2>
+      <button class="btn btn-ghost btn-sm" value="close">Закрыть</button>
     </form>
     <p class="muted small" id="mr-profile"></p>
     <form id="mr-form" class="mr-search">
       <input type="search" id="mr-query" placeholder="Название мода, например JEI" aria-label="Поиск на Modrinth" />
+      <button class="btn btn-primary" type="submit">Найти</button>
+    </form>
+    <div class="mr-type">
+      <span class="muted small">Добавлять как</span>
       <div class="segmented" id="mr-type" role="group" aria-label="Тип добавляемых модов">
         <button type="button" data-type="required" aria-pressed="true">Обязательный</button>
         <button type="button" data-type="optional" aria-pressed="false">Необязательный</button>
       </div>
-      <button class="btn btn-primary" type="submit">Найти</button>
-    </form>
+    </div>
     <ul class="queue mr-results" id="mr-results"></ul>
-    <p class="muted small">Показаны только моды с версией под текущий профиль. Обязательные зависимости добавятся сами. Не нашли — загрузите jar вручную.</p>
+    <p class="muted small">Показаны моды с версией под текущий профиль. Обязательные зависимости добавятся сами.</p>
   </dialog>
 
+  <!-- Редактирование мода -->
   <dialog id="dlg-edit" class="dialog">
     <form id="edit-form" class="edit-form" novalidate>
       <div class="dialog-head">
         <h2>Изменить мод</h2>
-        <button class="btn btn-ghost" type="button" id="edit-close">Закрыть</button>
+        <button class="btn btn-ghost btn-sm" type="button" id="edit-close">Закрыть</button>
       </div>
       <p class="muted small mono" id="edit-file"></p>
       <label class="field">Название
@@ -277,9 +318,9 @@
       </div>
       <label class="switch">
         <input type="checkbox" id="edit-server_side" />
-        <span>Нужен на сервере (заливать при синхронизации)</span>
+        <span>Нужен и на сервере — заливать при синхронизации</span>
       </label>
-      <div class="two-cols">
+      <div class="field-pair">
         <label class="field">Загрузчик
           <select id="edit-loader" data-loaders></select>
         </label>
@@ -287,7 +328,7 @@
           <input type="text" id="edit-mc_version" required class="mono" list="mc-versions" autocomplete="off" />
         </label>
       </div>
-      <p class="muted small">Сам jar-файл не меняется. Чтобы заменить его, удалите мод и загрузите заново.</p>
+      <p class="muted small">Сам jar не меняется. Чтобы заменить файл, удалите мод и загрузите заново.</p>
       <div class="dialog-foot">
         <button class="btn btn-ghost" type="button" id="edit-cancel">Отмена</button>
         <button class="btn btn-primary" type="submit" id="edit-save" disabled>Сохранить</button>
@@ -295,24 +336,22 @@
     </form>
   </dialog>
 
-  <!-- Удаление -->
-  <dialog id="dlg-delete" class="dialog">
+  <!-- Подтверждение -->
+  <dialog id="dlg-confirm" class="dialog">
     <form method="dialog">
-      <h2>Удалить мод?</h2>
-      <p id="delete-text"></p>
-      <p class="muted small">Мод пропадёт из базы и файл будет удалён с сервера. Игроки перестанут получать его при следующей синхронизации. Отменить удаление нельзя.</p>
+      <h2 id="confirm-title"></h2>
+      <div id="confirm-body" class="confirm-body"></div>
       <div class="dialog-foot">
         <button class="btn btn-ghost" value="cancel">Отмена</button>
-        <button class="btn btn-danger" value="confirm" id="delete-confirm">Удалить</button>
+        <button class="btn btn-primary" value="ok" id="confirm-ok"></button>
       </div>
     </form>
   </dialog>
 
-  <!-- версии из профиля и уже загруженных модов -->
   <datalist id="mc-versions"></datalist>
-
   <div class="toasts" id="toasts" aria-live="polite"></div>
 
+  <script src="properties-schema.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

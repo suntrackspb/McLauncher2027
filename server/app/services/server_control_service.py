@@ -23,6 +23,47 @@ LOG_PATH = "logs/latest.log"
 LOG_MAX_BYTES = 256 * 1024
 
 
+PROPS_PATH = "server.properties"
+PROP_KEY_RE = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
+_ESCAPES = {"t": "\t", "n": "\n", "r": "\r", "f": "\f"}
+
+
+def _unescape(value: str) -> str:
+    r"""Экранирование Java Properties: Minecraft пишет «\:», «\=», «\uXXXX»."""
+    out, i = [], 0
+    while i < len(value):
+        ch = value[i]
+        if ch != "\\" or i + 1 == len(value):
+            out.append(ch)
+            i += 1
+            continue
+        nxt = value[i + 1]
+        if nxt == "u" and re.fullmatch(r"[0-9a-fA-F]{4}", value[i + 2:i + 6]):
+            out.append(chr(int(value[i + 2:i + 6], 16)))
+            i += 6
+            continue
+        out.append(_ESCAPES.get(nxt, nxt))
+        i += 2
+    return "".join(out)
+
+
+def _escape(value: str) -> str:
+    out = []
+    for i, ch in enumerate(value):
+        if ch in "\\=:#!":
+            out.append("\\" + ch)
+        elif ch == " " and i == 0:
+            out.append("\\ ")
+        elif ch in "\t\n\r\f":
+            out.append("\\" + {"\t": "t", "\n": "n", "\r": "r", "\f": "f"}[ch])
+        elif ord(ch) > 0x7E or ord(ch) < 0x20:
+            # Так файл читается одинаково при любой кодировке, в которой его откроет сервер.
+            out.append(f"\\u{ord(ch):04x}")
+        else:
+            out.append(ch)
+    return "".join(out)
+
+
 def parse_properties(text: str) -> dict[str, str]:
     props = {}
     for line in text.splitlines():
@@ -30,7 +71,7 @@ def parse_properties(text: str) -> dict[str, str]:
         if not line or line.startswith(("#", "!")) or "=" not in line:
             continue
         key, value = line.split("=", 1)
-        props[key.strip()] = value.strip()
+        props[key.strip()] = _unescape(value.strip())
     return props
 
 
@@ -42,10 +83,10 @@ def set_properties(text: str, updates: dict[str, str]) -> str:
     for line in text.splitlines():
         key = line.split("=", 1)[0].strip() if "=" in line and not line.lstrip().startswith(("#", "!")) else None
         if key in left:
-            lines.append(f"{key}={left.pop(key)}")
+            lines.append(f"{key}={_escape(left.pop(key))}")
         else:
             lines.append(line)
-    lines += [f"{k}={v}" for k, v in left.items()]
+    lines += [f"{k}={_escape(v)}" for k, v in left.items()]
     return "\n".join(lines) + "\n"
 
 
@@ -121,7 +162,7 @@ def _systemctl(fs: SftpFS, conn, action: str, unit: str) -> str:
 
 def _read_props(fs: RemoteFS) -> dict[str, str]:
     try:
-        return parse_properties(fs.read("server.properties").decode("utf-8", errors="replace"))
+        return parse_properties(fs.read(PROPS_PATH).decode("utf-8", errors="replace"))
     except RemoteError:
         return {}
 
@@ -200,14 +241,14 @@ async def run_rcon(db: AsyncSession, cmd: str) -> dict:
 
 async def enable_rcon(db: AsyncSession) -> dict:
     def fn(fs, conn):
-        text = fs.read("server.properties").decode("utf-8", errors="replace")
+        text = fs.read(PROPS_PATH).decode("utf-8", errors="replace")
         props = parse_properties(text)
         updates = {"enable-rcon": "true"}
         if not props.get("rcon.port"):
             updates["rcon.port"] = "25575"
         if not props.get("rcon.password"):
             updates["rcon.password"] = secrets.token_urlsafe(18)
-        fs.write("server.properties", set_properties(text, updates).encode("utf-8"))
+        fs.write(PROPS_PATH, set_properties(text, updates).encode("utf-8"))
         # Minecraft читает server.properties только при старте. Если сервером
         # управляем сами — перезапускаем сразу, а не отправляем админа в консоль.
         service = _service_name(fs, conn)
@@ -219,5 +260,36 @@ async def enable_rcon(db: AsyncSession) -> dict:
                 return {"ok": True, "restarted": True, "needs_restart": False}
             return {"ok": True, "restarted": False, "needs_restart": False}
         return {"ok": True, "restarted": False, "needs_restart": True}
+
+    return await _with_fs(db, fn)
+
+
+async def read_properties(db: AsyncSession) -> dict:
+    def fn(fs, conn):
+        try:
+            text = fs.read(PROPS_PATH).decode("utf-8", errors="replace")
+        except RemoteError:
+            return {"exists": False, "values": {}, "can_control": _service_name(fs, conn) is not None}
+        return {"exists": True, "values": parse_properties(text), "can_control": _service_name(fs, conn) is not None}
+
+    return await _with_fs(db, fn)
+
+
+async def write_properties(db: AsyncSession, updates: dict[str, str]) -> dict:
+    for key, value in updates.items():
+        if not PROP_KEY_RE.match(key):
+            raise ServiceError(f"Недопустимое имя параметра: {key}", error_code="BadRequest")
+        if "\n" in value or "\r" in value:
+            raise ServiceError(f"{key}: значение должно быть в одну строку", error_code="BadRequest")
+
+    def fn(fs, conn):
+        try:
+            text = fs.read(PROPS_PATH).decode("utf-8", errors="replace")
+        except RemoteError:
+            text = ""
+        new_text = set_properties(text, updates) if updates else text
+        if new_text != text:
+            fs.write(PROPS_PATH, new_text.encode("utf-8"))
+        return {"exists": True, "values": parse_properties(new_text), "can_control": _service_name(fs, conn) is not None}
 
     return await _with_fs(db, fn)

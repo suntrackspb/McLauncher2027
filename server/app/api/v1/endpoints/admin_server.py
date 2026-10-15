@@ -128,3 +128,23 @@ async def server_enable_rcon(db: AsyncSession = Depends(get_db)):
         return await control.enable_rcon(db)
     except ServiceError as exc:
         raise _http(exc) from exc
+
+
+class PropertiesIn(BaseModel):
+    updates: dict[str, str] = Field(max_length=500)
+
+
+@router.get("/properties")
+async def get_properties(db: AsyncSession = Depends(get_db)):
+    try:
+        return await control.read_properties(db)
+    except ServiceError as exc:
+        raise _http(exc) from exc
+
+
+@router.put("/properties")
+async def put_properties(payload: PropertiesIn, db: AsyncSession = Depends(get_db)):
+    try:
+        return await control.write_properties(db, payload.updates)
+    except ServiceError as exc:
+        raise _http(exc) from exc
