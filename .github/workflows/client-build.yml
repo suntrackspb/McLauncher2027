@@ -104,11 +104,12 @@ jobs:
           --include-data-dir=web=web
           --include-data-dir=assets=assets
           --include-package-data=webview
+          --include-package-data=minecraft_launcher_lib
           --include-module=webview.platforms.edgechromium
           --include-module=webview.platforms.winforms
           --include-package=clr_loader
           --include-package=pythonnet
-          --windows-console-mode=disable
+          --windows-console-mode=attach
           --windows-icon-from-ico=assets/icon.ico
           app.py
 
@@ -124,6 +125,7 @@ jobs:
           --include-data-dir=web=web
           --include-data-dir=assets=assets
           --include-package-data=webview
+          --include-package-data=minecraft_launcher_lib
           --include-module=webview.platforms.cocoa
           --macos-create-app-bundle
           "--macos-app-name=$APP_NAME"
