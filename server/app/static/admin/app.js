@@ -1229,7 +1229,7 @@ async function saveProps(restart) {
 
 // --- подключение: профиль -----------------------------------------------------
 
-const PROFILE_FIELDS = ["mc_version", "loader", "loader_version", "server_address", "server_port"];
+const PROFILE_FIELDS = ["mc_version", "loader", "loader_version", "server_address", "server_port", "client_zip_url"];
 let profileEdited = false;
 
 function profileFromForm() {
@@ -1239,6 +1239,7 @@ function profileFromForm() {
     loader_version: $("profile-loader_version").value.trim() || null,
     server_address: $("profile-server_address").value.trim(),
     server_port: Number($("profile-server_port").value),
+    client_zip_url: $("profile-client_zip_url").value.trim() || null,
   };
 }
 
@@ -1250,6 +1251,7 @@ function fillProfileForm() {
   $("profile-loader_version").value = p?.loader_version ?? "";
   $("profile-server_address").value = p?.server_address ?? "";
   $("profile-server_port").value = p?.server_port ?? 25565;
+  $("profile-client_zip_url").value = p?.client_zip_url ?? "";
   onProfileInput();
 }
 

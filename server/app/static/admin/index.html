@@ -179,8 +179,12 @@
                 </label>
               </div>
             </div>
+            <label class="field">Ссылка на клиентский ZIP
+              <input type="url" id="profile-client_zip_url" placeholder="https://files.example.ru/client-v1.zip" class="mono" maxlength="2083" />
+              <span>Пустое поле оставляет установку по списку модов. Для новой версии архива укажите новую ссылку.</span>
+            </label>
             <p class="notice" id="profile-notice" hidden>
-              После сохранения лаунчеры игроков при следующем запуске заново поставят Minecraft под этот профиль.
+              Сохранённый профиль применяется при следующем запуске игры.
             </p>
             <div class="form-actions">
               <button type="submit" class="btn btn-primary" id="profile-save" disabled>Сохранить профиль</button>

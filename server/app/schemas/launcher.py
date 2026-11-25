@@ -23,5 +23,6 @@ class ServerProfileOut(BaseModel):
     loader_version: str | None
     server_address: str
     server_port: int
+    client_zip_url: str | None = None
 
     model_config = {"from_attributes": True}

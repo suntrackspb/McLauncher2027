@@ -20,6 +20,7 @@ async def update_profile(
     loader_version: str | None,
     server_address: str,
     server_port: int,
+    client_zip_url: str | None = None,
 ) -> ServerProfile:
     return await crud_server_profile.upsert(
         db,
@@ -28,4 +29,5 @@ async def update_profile(
         loader_version=loader_version,
         server_address=server_address,
         server_port=server_port,
+        client_zip_url=client_zip_url,
     )

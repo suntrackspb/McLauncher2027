@@ -14,6 +14,7 @@ class ServerProfile:
     loader_version: str | None
     server_address: str
     server_port: int
+    client_zip_url: str | None = None
 
 
 def build_jvm_arguments(ram_mb: int, extra: str = "") -> list[str]:

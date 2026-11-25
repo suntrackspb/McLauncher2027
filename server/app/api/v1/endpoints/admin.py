@@ -120,7 +120,10 @@ async def modrinth_install(payload: ModrinthInstallRequest, db: AsyncSession = D
     }
 
 
-@router.get("/profile", response_model=ServerProfileOut, dependencies=[Depends(require_admin)])
+@router.get(
+    "/profile", response_model=ServerProfileOut, response_model_exclude_defaults=True,
+    dependencies=[Depends(require_admin)],
+)
 async def get_profile(db: AsyncSession = Depends(get_db)):
     try:
         return await profile_service.get_profile(db)
@@ -128,7 +131,10 @@ async def get_profile(db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail=exc.message) from exc
 
 
-@router.put("/profile", response_model=ServerProfileOut, dependencies=[Depends(require_admin)])
+@router.put(
+    "/profile", response_model=ServerProfileOut, response_model_exclude_defaults=True,
+    dependencies=[Depends(require_admin)],
+)
 async def update_profile(payload: ServerProfileUpdate, db: AsyncSession = Depends(get_db)):
     return await profile_service.update_profile(
         db,
@@ -137,4 +143,5 @@ async def update_profile(payload: ServerProfileUpdate, db: AsyncSession = Depend
         loader_version=payload.loader_version,
         server_address=payload.server_address,
         server_port=payload.server_port,
+        client_zip_url=payload.client_zip_url,
     )

@@ -14,10 +14,16 @@ import webview
 
 from core.api_client.client import ApiClient, ApiError
 from core.debug_log import DebugLogger, debug_log_path, is_debug_flag_set
+from core.launch.client_archive import archive_game_directory, install_client_archive
 from core.launch.options_builder import ServerProfile
 from core.launch.pipeline import prepare_and_get_launch_command
 from core.launch.servers_dat import write_server_bookmark
-from core.launch.profile_store import load_installed_profile, save_installed_profile, sync_install_dir
+from core.launch.profile_store import (
+    clear_installed_profile,
+    load_installed_profile,
+    save_installed_profile,
+    sync_install_dir,
+)
 from core.settings.session_store import SessionStore
 from core.settings.store import SettingsStore, get_app_data_dir
 from core.textures import TEXTURE_KINDS, check_texture
@@ -82,6 +88,7 @@ class LauncherApi:
         self._game_process: subprocess.Popen | None = None
         self._game_killed = False
         self._minecraft_directory = str(self._app_data_dir / "minecraft")
+        self._profile: ServerProfile | None = None
         self._authlib_cache_dir = str(self._app_data_dir / "authlib_cache")
         self._force_reinstall = False
         # Апдейтер удаляет себя не сам (на Windows нельзя удалить файл
@@ -292,6 +299,8 @@ class LauncherApi:
     def get_optional_mods(self) -> dict:
         try:
             profile_data = self._api_client.get_profile()
+            if profile_data.get("client_zip_url"):
+                return {"ok": True, "data": []}
             mods = self._api_client.get_optional_mods(
                 profile_data["loader"], profile_data["mc_version"]
             )
@@ -316,11 +325,25 @@ class LauncherApi:
 
     # --- запуск игры -----------------------------------------------------
 
+    def _read_profile(self) -> tuple[ServerProfile, dict]:
+        data = self._api_client.get_profile()
+        profile = ServerProfile(
+            mc_version=data["mc_version"],
+            loader=data["loader"],
+            loader_version=data.get("loader_version"),
+            server_address=data["server_address"],
+            server_port=data["server_port"],
+            client_zip_url=data.get("client_zip_url"),
+        )
+        self._profile = profile
+        return profile, data
+
     def get_profile(self) -> dict:
         """Профиль сборки с бэка — показываем в UI, что именно будет
         установлено/запущено. Ошибку сети не пробрасываем: это лишь подпись."""
         try:
-            return {"ok": True, "profile": self._api_client.get_profile()}
+            _, data = self._read_profile()
+            return {"ok": True, "profile": data}
         except ApiError as exc:
             return {"ok": False, "error": str(exc)}
 
@@ -328,6 +351,9 @@ class LauncherApi:
         """Есть ли локально установленная сборка — от этого зависит надпись
         на главной кнопке (PLAY или INSTALL). Совпадение с профилем сервера
         не проверяем: это сетевой запрос, а play() сам доустановит отличия."""
+        if self._profile and self._profile.client_zip_url:
+            game = archive_game_directory(self._app_data_dir, self._profile)
+            return game.is_dir() and load_installed_profile(game.parent) is not None
         return load_installed_profile(self._app_data_dir) is not None
 
     def play(self) -> dict:
@@ -369,6 +395,9 @@ class LauncherApi:
     def open_game_folder(self) -> dict:
         """Открывает папку установки Minecraft в Finder/Проводнике."""
         folder = Path(self._minecraft_directory)
+        if self._profile and self._profile.client_zip_url:
+            game = archive_game_directory(self._app_data_dir, self._profile)
+            folder = game if game.is_dir() else game.parent
         try:
             folder.mkdir(parents=True, exist_ok=True)
             if sys.platform == "win32":
@@ -407,27 +436,33 @@ class LauncherApi:
         try:
             if reporter:
                 reporter.status("Проверка профиля сервера")
-            profile_data = self._api_client.get_profile()
-            profile = ServerProfile(
-                mc_version=profile_data["mc_version"],
-                loader=profile_data["loader"],
-                loader_version=profile_data.get("loader_version"),
-                server_address=profile_data["server_address"],
-                server_port=profile_data["server_port"],
-            )
-
-            wiped = sync_install_dir(
-                Path(self._minecraft_directory),
-                self._app_data_dir,
-                profile,
-                force=force_reinstall,
-            )
-            debug_logger.log(f"Переустановка директории игры: {wiped}")
-            if wiped and reporter:
-                reporter.status("Профиль сборки изменился — переустановка")
+            profile, _ = self._read_profile()
+            game_directory = Path(self._minecraft_directory)
+            marker_directory = self._app_data_dir
+            if profile.client_zip_url:
+                game_directory = archive_game_directory(self._app_data_dir, profile)
+                marker_directory = game_directory.parent
+                already_installed = (
+                    game_directory.is_dir()
+                    and load_installed_profile(marker_directory) is not None
+                    and not force_reinstall
+                )
+                install_client_archive(
+                    profile.client_zip_url, game_directory, reporter, force=force_reinstall,
+                )
+                if not already_installed:
+                    clear_installed_profile(marker_directory)
+            else:
+                wiped = sync_install_dir(
+                    game_directory, marker_directory, profile, force=force_reinstall,
+                )
+                already_installed = not wiped
+                debug_logger.log(f"Переустановка директории игры: {wiped}")
+                if wiped and reporter:
+                    reporter.status("Профиль сборки изменился — переустановка")
 
             command = prepare_and_get_launch_command(
-                minecraft_directory=self._minecraft_directory,
+                minecraft_directory=str(game_directory),
                 profile=profile,
                 username=self._session["username"],
                 uuid=self._session["uuid"],
@@ -439,13 +474,11 @@ class LauncherApi:
                 launcher_version=LAUNCHER_VERSION,
                 reporter=reporter,
                 debug_logger=debug_logger,
-                already_installed=not wiped,
+                already_installed=already_installed,
             )
-            save_installed_profile(self._app_data_dir, profile)
+            save_installed_profile(marker_directory, profile)
             try:
-                write_server_bookmark(
-                    Path(self._minecraft_directory), APP_NAME, _server_address(profile)
-                )
+                write_server_bookmark(game_directory, APP_NAME, _server_address(profile))
             except OSError as exc:
                 # Без закладки игра всё равно зайдёт на сервер через quickPlay.
                 debug_logger.log(f"Не удалось записать servers.dat: {exc!r}")
@@ -460,7 +493,7 @@ class LauncherApi:
             reporter.status("Запуск игры")
         self._game_killed = False
         try:
-            self._game_process = subprocess.Popen(command, cwd=self._minecraft_directory)
+            self._game_process = subprocess.Popen(command, cwd=game_directory)
         except OSError as exc:
             debug_logger.log(f"ОШИБКА запуска процесса: {exc!r}")
             if reporter:

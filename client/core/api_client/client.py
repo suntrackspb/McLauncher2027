@@ -53,7 +53,7 @@ class ApiClient:
         return self._get_dict("/api/v1/launcher/version")
 
     def get_profile(self) -> dict:
-        return self._get_dict("/api/v1/launcher/profile")
+        return self._get_dict("/api/v1/launcher/profile?supports_client_zip=true")
 
     def get_authlib_jars(self) -> list[dict]:
         return self._with_resolved_urls(self._get("/api/v1/launcher/authlib-jars", {}))

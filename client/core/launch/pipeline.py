@@ -68,17 +68,18 @@ def prepare_and_get_launch_command(
         )
         log(f"Loader установлен, version_id={version_id}")
 
-    if reporter:
-        reporter.status("Проверка модов")
-    required = api_client.get_required_mods(profile.loader, profile.mc_version)
-    optional = api_client.get_optional_mods(profile.loader, profile.mc_version)
-    log(f"Манифест модов: required={len(required)} optional={len(optional)}, "
-        f"включено игроком={settings.enabled_optional_mod_ids}")
-    mods_dir = Path(minecraft_directory) / "mods"
-    plan = plan_sync(required, optional, set(settings.enabled_optional_mod_ids), mods_dir)
-    log_block("План синхронизации модов", plan)
-    apply_sync_plan(plan, mods_dir, reporter)
-    log("Синхронизация модов завершена")
+    if not profile.client_zip_url:
+        if reporter:
+            reporter.status("Проверка модов")
+        required = api_client.get_required_mods(profile.loader, profile.mc_version)
+        optional = api_client.get_optional_mods(profile.loader, profile.mc_version)
+        log(f"Манифест модов: required={len(required)} optional={len(optional)}, "
+            f"включено игроком={settings.enabled_optional_mod_ids}")
+        mods_dir = Path(minecraft_directory) / "mods"
+        plan = plan_sync(required, optional, set(settings.enabled_optional_mod_ids), mods_dir)
+        log_block("План синхронизации модов", plan)
+        apply_sync_plan(plan, mods_dir, reporter)
+        log("Синхронизация модов завершена")
 
     if reporter:
         reporter.status("Настройка авторизации")

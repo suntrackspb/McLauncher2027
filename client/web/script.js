@@ -610,8 +610,7 @@ async function enterMainScreen(username) {
   setGameRunning(state.running);
   if (state.busy && !state.running) setPlayButtonBusy(true);
   if (state.running) setStatus("Игра запущена");
-  refreshInstallState();
-  loadProfileInfo();
+  loadProfileInfo().then(refreshInstallState);
   loadUserHead();
   showScreen("screen-main");
 

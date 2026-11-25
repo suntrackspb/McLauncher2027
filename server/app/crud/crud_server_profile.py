@@ -19,6 +19,7 @@ async def upsert(
     loader_version: str | None,
     server_address: str,
     server_port: int,
+    client_zip_url: str | None = None,
 ) -> ServerProfile:
     profile = await get(db)
     if profile is None:
@@ -30,6 +31,7 @@ async def upsert(
     profile.loader_version = loader_version
     profile.server_address = server_address
     profile.server_port = server_port
+    profile.client_zip_url = client_zip_url
 
     await db.commit()
     await db.refresh(profile)

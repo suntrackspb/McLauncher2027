@@ -113,8 +113,12 @@ async def sync(db: AsyncSession, *, apply: bool, plan_id: str | None = None) -> 
 
     def run():
         with open_remote(_params(conn)) as fs:
-            # Vanilla без модов — папку mods не трогаем вовсе.
-            return fs.host_key, server_sync.sync(fs, mods, apply=apply, sync_mods=loader != "vanilla", expected_plan_id=plan_id)
+            # В режиме ZIP администратор сам управляет серверной сборкой.
+            return fs.host_key, server_sync.sync(
+                fs, mods, apply=apply,
+                sync_mods=loader != "vanilla" and not profile.client_zip_url,
+                expected_plan_id=plan_id,
+            )
 
     try:
         host_key, report = await asyncio.to_thread(run)

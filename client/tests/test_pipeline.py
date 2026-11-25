@@ -100,3 +100,33 @@ def test_pipeline_passes_reporter_through_install(mocker, tmp_path):
 
     fake_loader.install.assert_called_once_with(str(tmp_path), "1.20.1", None, reporter)
     assert reporter.status.call_count >= 2
+
+
+def test_zip_profile_keeps_the_archive_mods_instead_of_syncing_manifest(mocker, tmp_path):
+    loader = mocker.patch("core.launch.pipeline.get_loader").return_value
+    loader.install.return_value = "neoforge-26.1.2.128"
+    patch_authlib = mocker.patch("core.launch.pipeline.patch_authlib_jars")
+    mocker.patch("minecraft_launcher_lib.command.get_minecraft_command", return_value=["java"])
+    api = mocker.Mock()
+    mods = tmp_path / "mods"
+    mods.mkdir()
+    jar = mods / "from-archive.jar"
+    jar.write_bytes(b"mod")
+    profile = ServerProfile(
+        mc_version="26.1.2", loader="neoforge", loader_version="26.1.2.128",
+        server_address="mc.example.com", server_port=25565,
+        client_zip_url="https://example.test/pack.zip",
+    )
+
+    command = prepare_and_get_launch_command(
+        minecraft_directory=str(tmp_path), profile=profile, username="Steve",
+        uuid="a" * 32, access_token="b" * 32, settings=LauncherSettings(),
+        authlib_cache_dir=str(tmp_path / "cache"), api_client=api,
+        launcher_name="McLauncher2027", launcher_version="v1.0.0",
+    )
+
+    assert command == ["java"]
+    assert jar.read_bytes() == b"mod"
+    api.get_required_mods.assert_not_called()
+    api.get_optional_mods.assert_not_called()
+    patch_authlib.assert_called_once()

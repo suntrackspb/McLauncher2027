@@ -27,6 +27,10 @@ def save_installed_profile(app_data_dir: Path, profile: ServerProfile) -> None:
     _marker_path(app_data_dir).write_text(json.dumps(asdict(profile)), encoding="utf-8")
 
 
+def clear_installed_profile(app_data_dir: Path) -> None:
+    _marker_path(app_data_dir).unlink(missing_ok=True)
+
+
 def sync_install_dir(
     minecraft_directory: Path, app_data_dir: Path, profile: ServerProfile, *, force: bool = False
 ) -> bool:
@@ -43,6 +47,6 @@ def sync_install_dir(
     if not force and load_installed_profile(app_data_dir) == profile:
         return False
 
-    _marker_path(app_data_dir).unlink(missing_ok=True)
+    clear_installed_profile(app_data_dir)
     shutil.rmtree(minecraft_directory, ignore_errors=True)
     return True

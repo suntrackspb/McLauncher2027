@@ -393,3 +393,44 @@ def test_logout_refused_while_launch_busy(tmp_path, mocker):
     api = _api_with_tmp_settings(tmp_path, mocker)
     api._launch_busy = True
     assert api.logout()["ok"] is False
+
+
+def test_play_uses_separate_zip_install_and_preserves_manifest_install(mocker, tmp_path):
+    from zipfile import ZipFile
+
+    from core.launch.client_archive import archive_game_directory
+    from core.launch.options_builder import ServerProfile
+
+    api = _api_with_tmp_settings(tmp_path, mocker)
+    api._session = {"username": "Steve", "uuid": "player-id", "access_token": "test-token"}
+    legacy = tmp_path / "minecraft"
+    legacy.mkdir()
+    (legacy / "options.txt").write_text("legacy settings")
+    profile = {
+        "mc_version": "26.1.2", "loader": "neoforge", "loader_version": "26.1.2.128",
+        "server_address": "mc.example.com", "server_port": 25565,
+        "client_zip_url": "https://example.test/pack.zip",
+    }
+    mocker.patch.object(api._api_client, "get_profile", return_value=profile)
+
+    def serve_zip(_url, destination, _reporter):
+        with ZipFile(destination, "w") as archive:
+            archive.writestr("mods/example.jar", "archive mod")
+
+    download = mocker.patch("core.launch.client_archive._download", side_effect=serve_zip)
+    prepare = mocker.patch("ui_bridge.api.prepare_and_get_launch_command", return_value=["java"])
+    process = mocker.patch("ui_bridge.api.subprocess.Popen")
+    game = archive_game_directory(tmp_path, ServerProfile(**profile))
+
+    api._play_thread()
+    assert prepare.call_args.kwargs["minecraft_directory"] == str(game)
+    assert prepare.call_args.kwargs["already_installed"] is False
+    process.assert_called_once_with(["java"], cwd=game)
+    assert (game / "mods/example.jar").read_text() == "archive mod"
+    assert (game / "servers.dat").is_file()
+    assert (legacy / "options.txt").read_text() == "legacy settings"
+    assert api.is_installed()
+
+    api._play_thread()
+    download.assert_called_once()
+    assert prepare.call_args.kwargs["already_installed"] is True

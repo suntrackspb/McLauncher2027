@@ -252,3 +252,24 @@ async def test_ftp_properties_edit(client, ftp_server, ftp_root):
 
     bad = await client.put("/api/v1/admin/server/properties", headers=headers, json={"updates": {"motd": "a\nb"}})
     assert bad.status_code == 400
+
+
+async def test_zip_profile_leaves_manually_installed_server_mods_in_place(client, ftp_server, ftp_root):
+    headers = await _admin(client)
+    profile = (await client.get("/api/v1/admin/profile", headers=headers)).json()
+    response = await client.put(
+        "/api/v1/admin/profile", headers=headers,
+        json={**profile, "client_zip_url": "https://example.test/client.zip"},
+    )
+    assert response.status_code == 200
+    await _connect(client, headers, ftp_server)
+
+    plan = (await client.get("/api/v1/admin/server/sync", headers=headers)).json()
+    assert plan["mods_upload"] == plan["mods_remove"] == []
+    result = await client.post(
+        "/api/v1/admin/server/sync", headers=headers, json={"plan_id": plan["plan_id"]},
+    )
+    assert result.status_code == 200
+    assert (ftp_root / "mods" / "stray.jar").exists()
+    assert not (ftp_root / "mods" / "tree.jar").exists()
+    assert result.json()["authlib"]["6.0.54"] == "patched"

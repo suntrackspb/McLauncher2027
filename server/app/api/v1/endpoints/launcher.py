@@ -17,16 +17,18 @@ async def version() -> LauncherVersionOut:
     return await launcher_service.get_latest_version()
 
 
-@router.get("/profile", response_model=ServerProfileOut)
-async def profile(db: AsyncSession = Depends(get_db)) -> ServerProfileOut:
-    """Профиль клиента (версия/loader/адрес сервера) — единственный источник
-    правды вместо хардкода в client/ui_bridge/config.py. Клиент сравнивает его
-    с локальным маркером установки и переустанавливает minecraft-директорию
-    целиком, если что-то изменилось (см. DEV_PLAN.md)."""
+@router.get("/profile", response_model=ServerProfileOut, response_model_exclude_defaults=True)
+async def profile(
+    db: AsyncSession = Depends(get_db), supports_client_zip: bool = False,
+) -> ServerProfileOut:
+    """Профиль установки и подключения клиента."""
     try:
-        return await profile_service.get_profile(db)
+        current = await profile_service.get_profile(db)
     except ServiceError as exc:
         raise HTTPException(status_code=404, detail=exc.message) from exc
+    if current.client_zip_url and not supports_client_zip:
+        raise HTTPException(status_code=409, detail="Обновите лаунчер для установки сборки из ZIP")
+    return ServerProfileOut.model_validate(current)
 
 
 @router.get("/authlib-jars", response_model=list[AuthlibJarOut])

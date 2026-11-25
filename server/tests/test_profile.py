@@ -67,3 +67,33 @@ async def test_updating_profile_replaces_previous_value(client):
 
     get_resp = await client.get("/api/v1/launcher/profile")
     assert get_resp.json() == vanilla_payload
+
+
+async def test_zip_profile_can_be_enabled_and_switched_back_to_manifest(client):
+    headers = await _admin_headers(client)
+    archive_profile = {
+        **_PROFILE_PAYLOAD, "client_zip_url": "https://example.test/client-v2.zip",
+    }
+    admin = await client.put("/api/v1/admin/profile", headers=headers, json=archive_profile)
+    assert admin.status_code == 200
+    assert admin.json() == archive_profile
+
+    old_client = await client.get("/api/v1/launcher/profile")
+    assert old_client.status_code == 409
+    updated = await client.get("/api/v1/launcher/profile", params={"supports_client_zip": True})
+    assert updated.json() == archive_profile
+
+    clear = await client.put(
+        "/api/v1/admin/profile", headers=headers, json={**archive_profile, "client_zip_url": None},
+    )
+    assert clear.json() == _PROFILE_PAYLOAD
+    assert (await client.get("/api/v1/launcher/profile")).json() == _PROFILE_PAYLOAD
+
+
+async def test_admin_rejects_non_http_zip_url(client):
+    headers = await _admin_headers(client)
+    response = await client.put(
+        "/api/v1/admin/profile", headers=headers,
+        json={**_PROFILE_PAYLOAD, "client_zip_url": "file:///tmp/client.zip"},
+    )
+    assert response.status_code == 422
