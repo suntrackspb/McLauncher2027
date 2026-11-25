@@ -93,13 +93,14 @@ jobs:
       # динамически, поэтому их нужно явно включать через --include-module.
       - name: Build launcher (Windows)
         if: matrix.platform == 'windows'
+        shell: pwsh
         run: >
           python -m nuitka
           --standalone
           --assume-yes-for-downloads
           --output-dir=dist
-          --output-filename=${{ env.APP_NAME }}
-          --output-folder-name=${{ env.APP_NAME }}
+          "--output-filename=$env:APP_NAME"
+          "--output-folder-name=$env:APP_NAME"
           --include-data-dir=web=web
           --include-data-dir=assets=assets
           --include-package-data=webview
@@ -113,19 +114,20 @@ jobs:
 
       - name: Build launcher (macOS)
         if: matrix.platform == 'macos'
+        shell: bash
         run: >
           python -m nuitka
           --standalone
           --assume-yes-for-downloads
           --output-dir=dist
-          --output-folder-name=${{ env.APP_NAME }}
+          "--output-folder-name=$APP_NAME"
           --include-data-dir=web=web
           --include-data-dir=assets=assets
           --include-package-data=webview
           --include-module=webview.platforms.cocoa
           --macos-create-app-bundle
-          --macos-app-name=${{ env.APP_NAME }}
-          --macos-signed-app-name=${{ env.BUNDLE_ID }}
+          "--macos-app-name=$APP_NAME"
+          "--macos-signed-app-name=$BUNDLE_ID"
           --macos-app-category-type=public.app-category.games
           --macos-app-icon=assets/icon.icns
           app.py
