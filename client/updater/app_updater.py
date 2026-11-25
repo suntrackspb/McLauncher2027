@@ -109,10 +109,15 @@ def extract_new_version(zip_path: Path, extract_dir: Path, launcher_path: Path) 
         shutil.rmtree(extract_dir)
     extract_dir.mkdir(parents=True)
 
-    with zipfile.ZipFile(zip_path) as zf:
-        zf.extractall(extract_dir)
+    is_macos = _is_macos_bundle(launcher_path)
+    if is_macos and sys.platform == "darwin":
+        # Preserve executable permissions and extended attributes used by codesign.
+        subprocess.run(["ditto", "-x", "-k", str(zip_path), str(extract_dir)], check=True)
+    else:
+        with zipfile.ZipFile(zip_path) as zf:
+            zf.extractall(extract_dir)
 
-    if _is_macos_bundle(launcher_path):
+    if is_macos:
         candidates = list(extract_dir.rglob("*.app"))
         if not candidates:
             raise RuntimeError("В архиве не найден новый лаунчер")
@@ -135,7 +140,9 @@ def replace_launcher(launcher_path: Path, new_path: Path) -> None:
     if launcher_path.exists():
         launcher_path.rename(backup_path)
 
-    if new_path.is_dir():
+    if _is_macos_bundle(launcher_path) and sys.platform == "darwin":
+        subprocess.run(["ditto", str(new_path), str(launcher_path)], check=True)
+    elif new_path.is_dir():
         shutil.copytree(new_path, launcher_path)
     else:
         shutil.copy2(new_path, launcher_path)

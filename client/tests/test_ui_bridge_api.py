@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 from core.api_client.client import ApiError
 from core.settings.store import LauncherSettings
 from ui_bridge.api import LauncherApi
@@ -163,14 +165,14 @@ def test_start_update_fails_when_updater_download_fails(tmp_path, mocker):
     assert "Не удалось скачать updater" in result["error"]
 
 
-def test_start_update_downloads_updater_and_closes_window(tmp_path, mocker):
+def test_start_update_in_nuitka_downloads_updater_and_closes_window(tmp_path, mocker):
     api = _api_with_tmp_settings(tmp_path, mocker)
     install_root = tmp_path / "install"
     launcher_dir = install_root / "Launcher"
     launcher_dir.mkdir(parents=True)
     updater_path = tmp_path / "downloaded_updater"
 
-    mocker.patch("ui_bridge.api.sys.frozen", True, create=True)
+    mocker.patch("ui_bridge.api.__compiled__", SimpleNamespace(standalone=True), create=True)
     mocker.patch("ui_bridge.api.sys.executable", str(launcher_dir / "Launcher.exe"))
     mocker.patch("ui_bridge.api.updater_binary_path", return_value=updater_path)
     response_mock = mocker.Mock(content=b"stub-binary")
@@ -183,9 +185,9 @@ def test_start_update_downloads_updater_and_closes_window(tmp_path, mocker):
 
     assert result == {"ok": True}
     assert updater_path.read_bytes() == b"stub-binary"
-    popen_mock.assert_called_once()
-    args = popen_mock.call_args[0][0]
-    assert args[0] == str(updater_path)
+    popen_mock.assert_called_once_with(
+        [str(updater_path), str(launcher_dir), "http://x/win.zip"], cwd=updater_path.parent,
+    )
     api._window.destroy.assert_called_once()
 
 

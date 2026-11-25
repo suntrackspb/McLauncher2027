@@ -1,3 +1,5 @@
+import stat
+import sys
 import zipfile
 
 from updater.app_updater import extract_new_version, relaunch, replace_launcher, run
@@ -30,12 +32,18 @@ def test_extract_new_version_finds_onedir_folder_on_windows_style_path(tmp_path)
 
 def test_extract_new_version_finds_app_bundle_on_macos_style_path(tmp_path):
     zip_path = tmp_path / "update.zip"
-    _make_zip_with(zip_path, entries={"NewLauncher.app/Contents/MacOS/launcher": b"binary"})
+    executable = zipfile.ZipInfo("NewLauncher.app/Contents/MacOS/launcher")
+    executable.create_system = 3
+    executable.external_attr = (stat.S_IFREG | 0o755) << 16
+    with zipfile.ZipFile(zip_path, "w") as archive:
+        archive.writestr(executable, b"binary")
 
     result = extract_new_version(zip_path, tmp_path / "extract", tmp_path / "Launcher.app")
 
     assert result.name == "NewLauncher.app"
     assert result.is_dir()
+    if sys.platform == "darwin":
+        assert (result / "Contents" / "MacOS" / "launcher").stat().st_mode & stat.S_IXUSR
 
 
 def test_extract_new_version_raises_when_nothing_found(tmp_path):

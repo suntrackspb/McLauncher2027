@@ -156,7 +156,8 @@ class LauncherApi:
         входит — см. DEV_PLAN.md), запускает его и закрывает лаунчер. Апдейтер
         сам подменяет файлы, перезапускает лаунчер и удаляет себя (см.
         client/updater/app_updater.py)."""
-        if not getattr(sys, "frozen", False):
+        compiled = globals().get("__compiled__")
+        if not (getattr(compiled, "standalone", False) or getattr(sys, "frozen", False)):
             return {"ok": False, "error": "Обновление доступно только в собранной версии лаунчера"}
 
         launcher_path = resolve_launcher_path(sys.executable)
@@ -165,7 +166,7 @@ class LauncherApi:
         except Exception as exc:
             return {"ok": False, "error": f"Не удалось скачать updater: {exc}"}
 
-        subprocess.Popen([str(updater_path), str(launcher_path), download_url])
+        subprocess.Popen([str(updater_path), str(launcher_path), download_url], cwd=updater_path.parent)
         if self._window:
             self._window.destroy()
         return {"ok": True}

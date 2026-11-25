@@ -170,7 +170,7 @@ jobs:
       - name: Package launcher (macOS)
         if: matrix.platform == 'macos'
         working-directory: client/dist
-        run: zip -r "$APP_NAME-macos.zip" "$APP_NAME.app"
+        run: ditto -c -k --sequesterRsrc --keepParent "$APP_NAME.app" "$APP_NAME-macos.zip"
 
       - name: Rename updater binary
         working-directory: client/dist
