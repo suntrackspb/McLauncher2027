@@ -94,6 +94,8 @@ class ModLoaderStrategy(LoaderStrategy):
             result = subprocess.run(
                 [java, "-jar", str(installer), "--install-client", directory],
                 cwd=temp,
+                # The Windows GUI launcher can start without a valid console stdin.
+                stdin=subprocess.DEVNULL,
                 capture_output=True,
                 text=True,
                 errors="replace",

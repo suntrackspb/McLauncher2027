@@ -1,3 +1,4 @@
+import subprocess
 from io import BytesIO
 from pathlib import Path
 
@@ -72,6 +73,8 @@ def test_neoforge_calendar_install_uses_minecraft_runtime_and_official_installer
         assert command[:2] == [java_path, "-jar"]
         assert Path(command[2]).read_bytes() == b"NeoForge installer"
         assert command[3:] == ["--install-client", str(tmp_path)]
+        assert kwargs["stdin"] == subprocess.DEVNULL
+        assert kwargs["capture_output"] is True
         return mocker.Mock(returncode=0)
 
     run = mocker.patch("core.loaders.mod_loader_strategy.subprocess.run", side_effect=run_installer)
