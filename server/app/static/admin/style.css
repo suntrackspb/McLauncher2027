@@ -71,7 +71,7 @@ a { color: var(--moss); }
 .field { display: block; font-size: 13px; font-weight: 500; color: var(--muted); }
 .field > input, .field > select, .field > textarea, .field > .segmented { margin-top: 6px; }
 
-input[type="text"], input[type="password"], input[type="number"], input[type="search"], select, textarea {
+input[type="text"], input[type="password"], input[type="number"], input[type="search"], input[type="url"], select, textarea {
   width: 100%;
   padding: 9px 11px;
   background: var(--surface);
@@ -81,6 +81,9 @@ input[type="text"], input[type="password"], input[type="number"], input[type="se
   font: inherit;
   font-weight: 400;
 }
+input[type="url"] { display: block; min-width: 0; }
+.field + input[type="url"] { margin-top: 6px; }
+.field-hint { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
 input.mono, textarea.mono { font-family: var(--mono); font-size: 13.5px; }
 input:hover:not(:disabled), select:hover:not(:disabled), textarea:hover { border-color: var(--muted); }
 input:disabled { opacity: .55; }

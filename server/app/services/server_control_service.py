@@ -116,7 +116,10 @@ def _service_name(fs: RemoteFS, conn) -> str | None:
         return None
     if conn.service_name:
         return conn.service_name
-    root = conn.server_dir.rstrip("/") or "/"
+    root = conn.server_dir.rstrip("/")
+    # Корень SFTP на хостинге может быть виртуальным и не определяет systemd-сервис.
+    if not root:
+        return None
     patterns = " ".join(
         f"-e {shlex.quote(f'WorkingDirectory={d}')}" for d in (root, root + "/")
     )

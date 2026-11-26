@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Unbounded:wght@500;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style.css?v=2" />
 </head>
 <body>
   <section id="screen-login" class="login" hidden>
@@ -178,11 +178,12 @@
                   <input type="number" id="profile-server_port" required min="1" max="65535" placeholder="25565" class="mono" />
                 </label>
               </div>
+              <div class="full">
+                <label class="field" for="profile-client_zip_url">Ссылка на клиентский ZIP</label>
+                <input type="url" id="profile-client_zip_url" placeholder="https://files.example.ru/client-v1.zip" class="mono" maxlength="2083" aria-describedby="profile-client-zip-hint" autocomplete="url" />
+                <p class="field-hint" id="profile-client-zip-hint">Оставьте поле пустым для установки по списку модов. Для новой версии архива укажите новую ссылку.</p>
+              </div>
             </div>
-            <label class="field">Ссылка на клиентский ZIP
-              <input type="url" id="profile-client_zip_url" placeholder="https://files.example.ru/client-v1.zip" class="mono" maxlength="2083" />
-              <span>Пустое поле оставляет установку по списку модов. Для новой версии архива укажите новую ссылку.</span>
-            </label>
             <p class="notice" id="profile-notice" hidden>
               Сохранённый профиль применяется при следующем запуске игры.
             </p>
@@ -195,7 +196,7 @@
           <form id="conn-form" class="card" novalidate autocomplete="off">
             <div class="card-head">
               <h2>Доступ к файлам сервера</h2>
-              <p>Нужен для заливки модов, логов, консоли и параметров игры. FTP — сервер у хостера с панелью, SFTP — свой сервер с SSH.</p>
+              <p>Нужен для загрузки модов, чтения логов и настройки игры. Протокол, хост и порт указаны в панели хостинга.</p>
             </div>
             <div class="form-grid">
               <label class="field">Протокол

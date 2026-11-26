@@ -2,10 +2,12 @@
 
 import hashlib
 import json
+import re
 import shutil
 import stat
 from pathlib import Path, PureWindowsPath
 from tempfile import TemporaryDirectory
+from urllib.parse import urlsplit
 from uuid import uuid4
 from zipfile import BadZipFile, ZipFile
 
@@ -19,6 +21,7 @@ _GAME_ENTRIES = {
     "shaderpacks", "versions", "options.txt",
 }
 _CHUNK_SIZE = 256 * 1024
+_MAX_CHECKSUM_BYTES = 4096
 
 
 class ClientArchiveError(Exception):
@@ -33,9 +36,30 @@ def archive_game_directory(app_data: Path, profile: ServerProfile) -> Path:
     return app_data / "client-archives" / key / "minecraft"
 
 
-def _download(url: str, archive: Path, reporter: ProgressReporter | None) -> None:
+def _expected_sha256(url: str) -> str:
+    parts = urlsplit(url)
+    checksum_url = parts._replace(path=f"{parts.path}.sha256", fragment="").geturl()
+    data = bytearray()
+    try:
+        with requests.get(checksum_url, stream=True, timeout=(10, 30)) as response:
+            response.raise_for_status()
+            for chunk in response.iter_content(chunk_size=1024):
+                data.extend(chunk)
+                if len(data) > _MAX_CHECKSUM_BYTES:
+                    raise ClientArchiveError("Файл SHA-256 клиентского ZIP слишком большой")
+    except requests.RequestException as exc:
+        raise ClientArchiveError("Не удалось скачать файл SHA-256 клиентского ZIP") from exc
+
+    fields = data.split(maxsplit=1)
+    if not fields or not re.fullmatch(rb"[0-9a-fA-F]{64}", fields[0]):
+        raise ClientArchiveError("Некорректная контрольная сумма SHA-256 клиентского ZIP")
+    return fields[0].decode("ascii").lower()
+
+
+def _download(url: str, archive: Path, reporter: ProgressReporter | None) -> str:
     if reporter:
         reporter.status("Скачивание клиентской сборки")
+    digest = hashlib.sha256()
     try:
         with requests.get(url, stream=True, timeout=(10, 60)) as response:
             response.raise_for_status()
@@ -45,6 +69,7 @@ def _download(url: str, archive: Path, reporter: ProgressReporter | None) -> Non
             with archive.open("wb") as target:
                 for chunk in response.iter_content(chunk_size=_CHUNK_SIZE):
                     target.write(chunk)
+                    digest.update(chunk)
                     downloaded += len(chunk)
                     if reporter and total:
                         reporter.progress(downloaded, total)
@@ -52,6 +77,7 @@ def _download(url: str, archive: Path, reporter: ProgressReporter | None) -> Non
         status = exc.response.status_code if exc.response is not None else None
         detail = f" (HTTP {status})" if status else ""
         raise ClientArchiveError(f"Не удалось скачать клиентский ZIP{detail}") from exc
+    return digest.hexdigest()
 
 
 def _extract(archive: Path, staging: Path) -> Path:
@@ -100,11 +126,16 @@ def install_client_archive(
 
     parent = game_directory.parent
     parent.mkdir(parents=True, exist_ok=True)
+    if reporter:
+        reporter.status("Получение контрольной суммы сборки")
+    expected = _expected_sha256(url)
     with TemporaryDirectory(prefix=".install-", dir=parent) as tmp:
         archive = Path(tmp) / "client.zip"
+        if _download(url, archive, reporter) != expected:
+            raise ClientArchiveError("SHA-256 клиентского ZIP не совпал. Попробуйте скачать сборку заново.")
+
         staging = Path(tmp) / "unpacked"
         staging.mkdir()
-        _download(url, archive, reporter)
         if reporter:
             reporter.status("Распаковка клиентской сборки")
         game = _extract(archive, staging)

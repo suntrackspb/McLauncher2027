@@ -398,6 +398,8 @@ def test_logout_refused_while_launch_busy(tmp_path, mocker):
 
 
 def test_play_uses_separate_zip_install_and_preserves_manifest_install(mocker, tmp_path):
+    from hashlib import sha256
+    from io import BytesIO
     from zipfile import ZipFile
 
     from core.launch.client_archive import archive_game_directory
@@ -415,10 +417,17 @@ def test_play_uses_separate_zip_install_and_preserves_manifest_install(mocker, t
     }
     mocker.patch.object(api._api_client, "get_profile", return_value=profile)
 
-    def serve_zip(_url, destination, _reporter):
-        with ZipFile(destination, "w") as archive:
-            archive.writestr("mods/example.jar", "archive mod")
+    buffer = BytesIO()
+    with ZipFile(buffer, "w") as archive:
+        archive.writestr("mods/example.jar", "archive mod")
+    content = buffer.getvalue()
+    checksum = sha256(content).hexdigest()
 
+    def serve_zip(_url, destination, _reporter):
+        destination.write_bytes(content)
+        return checksum
+
+    mocker.patch("core.launch.client_archive._expected_sha256", return_value=checksum)
     download = mocker.patch("core.launch.client_archive._download", side_effect=serve_zip)
     prepare = mocker.patch("ui_bridge.api.prepare_and_get_launch_command", return_value=["java"])
     process = mocker.patch("ui_bridge.api.subprocess.Popen")

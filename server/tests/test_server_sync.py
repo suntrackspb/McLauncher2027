@@ -129,8 +129,20 @@ async def test_sync_without_connection_is_409(client):
 
 import socket
 import struct
+from types import SimpleNamespace
 
 from app.services import server_control_service
+from app.services.remote_fs import SftpFS
+
+
+def test_sftp_root_requires_explicit_service_name(mocker):
+    fs = mocker.Mock(spec=SftpFS)
+    conn = SimpleNamespace(server_dir="/", service_name=None)
+
+    assert server_control_service._service_name(fs, conn) is None
+    conn.service_name = "mc-forge"
+    assert server_control_service._service_name(fs, conn) == "mc-forge"
+    fs.run.assert_not_called()
 
 
 def test_set_properties_keeps_comments_and_order():
