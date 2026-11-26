@@ -1,3 +1,6 @@
+from io import BytesIO
+from pathlib import Path
+
 import pytest
 
 from core.loaders.factory import get_loader
@@ -51,6 +54,48 @@ def test_mod_loader_strategy_install_pins_loader_version(mocker):
     fake_loader.install.assert_called_once()
     _, kwargs = fake_loader.install.call_args
     assert kwargs["loader_version"] == "47.4.13"
+
+
+def test_neoforge_calendar_install_uses_minecraft_runtime_and_official_installer(mocker, tmp_path):
+    install = mocker.patch("minecraft_launcher_lib.install.install_minecraft_version")
+    mocker.patch(
+        "minecraft_launcher_lib.runtime.get_version_runtime_information",
+        return_value={"name": "java-runtime-epsilon", "javaMajorVersion": 25},
+    )
+    java_path = str(tmp_path / "runtime" / "java")
+    executable = mocker.patch("minecraft_launcher_lib.runtime.get_executable_path", return_value=java_path)
+    response = mocker.MagicMock()
+    response.__enter__.return_value.raw = BytesIO(b"NeoForge installer")
+    get = mocker.patch("core.loaders.mod_loader_strategy.requests.get", return_value=response)
+
+    def run_installer(command, **kwargs):
+        assert command[:2] == [java_path, "-jar"]
+        assert Path(command[2]).read_bytes() == b"NeoForge installer"
+        assert command[3:] == ["--install-client", str(tmp_path)]
+        return mocker.Mock(returncode=0)
+
+    run = mocker.patch("core.loaders.mod_loader_strategy.subprocess.run", side_effect=run_installer)
+    loader = get_loader("neoforge")
+
+    assert loader.install(str(tmp_path), "26.1.2", "26.1.2.129") == "neoforge-26.1.2.129"
+    assert [call.args for call in install.call_args_list] == [
+        ("26.1.2", str(tmp_path)), ("neoforge-26.1.2.129", str(tmp_path)),
+    ]
+    executable.assert_called_once_with("java-runtime-epsilon", str(tmp_path))
+    assert get.call_args.args[0].endswith("/26.1.2.129/neoforge-26.1.2.129-installer.jar")
+    run.assert_called_once()
+
+
+def test_neoforge_calendar_resolves_stable_matching_patch(mocker):
+    get = mocker.patch("core.loaders.mod_loader_strategy.requests.get")
+    get.return_value.json.return_value = {
+        "versions": ["26.1.2.125", "26.1.2.129", "26.1.2.130-beta", "26.2.0.149"],
+    }
+    loader = get_loader("neoforge")
+
+    assert loader.resolve_version_id("/tmp/mc", "26.1.2") == "neoforge-26.1.2.129"
+    with pytest.raises(ValueError, match="несовместим"):
+        loader.resolve_version_id("/tmp/mc", "26.1.2", "26.2.0.149")
 
 
 def test_mod_loader_strategy_resolve_version_id_uses_latest_when_unset(mocker):
