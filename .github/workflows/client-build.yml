@@ -72,13 +72,6 @@ jobs:
 
       - run: pip install -r requirements.txt
 
-      # Единственное место, где берём APP_NAME/BUNDLE_ID — из ui_bridge/config.py,
-      # а не дублируем их строкой здесь (см. историю рассинхрона в git log
-      # ui_bridge/config.py).
-      - name: Read app metadata
-        shell: bash
-        run: python -c "from ui_bridge.config import APP_NAME, BUNDLE_ID; print(f'APP_NAME={APP_NAME}'); print(f'BUNDLE_ID={BUNDLE_ID}')" >> "$GITHUB_ENV"
-
       # Версия лаунчера больше не правится руками перед релизом (см. историю
       # с забытым обновлением константы) — на тег v1.0.x просто кладём сюда
       # сам тег, сборка без тега (workflow_dispatch) остаётся с dev-версией
@@ -87,6 +80,10 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
         run: echo "LAUNCHER_VERSION = \"${GITHUB_REF_NAME}\"" > ui_bridge/_version.py
+
+      - name: Read app metadata
+        shell: bash
+        run: python -c "from ui_bridge.config import APP_NAME, BUNDLE_ID, LAUNCHER_VERSION; print(f'APP_NAME={APP_NAME}'); print(f'BUNDLE_ID={BUNDLE_ID}'); print(f'LAUNCHER_VERSION={LAUNCHER_VERSION}')" >> "$GITHUB_ENV"
 
       # onedir/standalone (не onefile) — надёжнее для pywebview, см. build.spec
       # раньше / комментарий в app.py. pywebview грузит платформенные бэкенды
@@ -167,6 +164,16 @@ jobs:
           Rename-Item -Path "$env:APP_NAME.dist" -NewName "$env:APP_NAME"
           Compress-Archive -Path "$env:APP_NAME" -DestinationPath "$env:APP_NAME-windows.zip"
 
+      - name: Build installer (Windows)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          $compiler = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path -LiteralPath $compiler)) {
+            $compiler = (Get-Command ISCC.exe -ErrorAction Stop).Source
+          }
+          & $compiler 'installer/launcher.iss'
+
       - name: Package launcher (macOS)
         if: matrix.platform == 'macos'
         working-directory: client/dist
@@ -194,6 +201,13 @@ jobs:
         with:
           name: app_updater-${{ matrix.platform }}
           path: client/dist/app_updater-${{ matrix.platform }}${{ matrix.platform == 'windows' && '.exe' || '' }}
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        if: matrix.platform == 'windows'
+        with:
+          name: McLauncher2027-Setup
+          path: client/dist/McLauncher2027-Setup.exe
           if-no-files-found: error
 
   release:

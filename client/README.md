@@ -52,13 +52,13 @@ python -m nuitka --onefile --output-dir=dist --output-filename=app_updater \
 `--include-module=webview.platforms.*` обязательны, иначе на чистой машине
 (CI) сборка запускается с пустым окном. Из-за standalone и на Windows, и на
 macOS "лаунчер" — это папка (standalone-директория или `.app`-бандл), а не
-один файл — см. `core/updater/paths.py`. `app_updater`
-собирается отдельно и в архиве релиза кладётся **рядом** с папкой/бандлом
-лаунчера, не внутри неё (иначе Windows не даст переименовать директорию, пока
-внутри неё выполняется сам работающий `app_updater.exe`). Автоматизировано в
-`.github/workflows/client-build.yml` (matrix Windows/macOS, ad-hoc `codesign`
-на macOS против "повреждённого" Gatekeeper-вердикта, публикация в GitHub
-Release при пуше тега).
+один файл — см. `core/updater/paths.py`. GitHub Actions публикует ZIP лаунчера
+и `app_updater` отдельными файлами в черновике GitHub Release после пуша тега.
+
+Для установки на Windows скачайте `McLauncher2027-Setup.exe` из релиза.
+Inno Setup устанавливает лаунчер в профиль пользователя и создаёт ярлык в
+меню «Пуск». ZIP используется при автообновлении. Апдейтер заменяет вложенную
+папку `launcher`, поэтому ярлык и деинсталлятор продолжают работать.
 
 ## Запуск тестов
 
