@@ -91,10 +91,7 @@ class LauncherApi:
         self._profile: ServerProfile | None = None
         self._authlib_cache_dir = str(self._app_data_dir / "authlib_cache")
         self._force_reinstall = False
-        # Апдейтер удаляет себя не сам (на Windows нельзя удалить файл
-        # собственного работающего .exe) — оставшийся с прошлого обновления
-        # файл подчищаем здесь, при следующем старте лаунчера, когда апдейтер
-        # уже точно закрылся (см. core/updater/paths.py::cleanup_stale_updater).
+        # Если апдейтер завершился, можно удалить его временный EXE.
         cleanup_stale_updater()
 
     def set_window(self, window) -> None:
@@ -166,7 +163,14 @@ class LauncherApi:
         except Exception as exc:
             return {"ok": False, "error": f"Не удалось скачать updater: {exc}"}
 
-        subprocess.Popen([str(updater_path), str(launcher_path), download_url], cwd=updater_path.parent)
+        try:
+            subprocess.Popen(
+                [str(updater_path), str(launcher_path), download_url],
+                cwd=updater_path.parent,
+                creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0),
+            )
+        except OSError as exc:
+            return {"ok": False, "error": f"Не удалось запустить updater: {exc}"}
         if self._window:
             self._window.destroy()
         return {"ok": True}

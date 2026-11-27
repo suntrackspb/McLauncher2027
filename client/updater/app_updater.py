@@ -92,12 +92,18 @@ def wait_for_launcher_close(launcher_path: Path, timeout: int = 30) -> bool:
 
 def download_archive(url: str, destination: Path) -> None:
     log.info("Скачивание новой версии: %s", url)
-    response = requests.get(url, stream=True, timeout=60)
-    response.raise_for_status()
-    with open(destination, "wb") as file:
-        for chunk in response.iter_content(chunk_size=8192):
-            if chunk:
+    with requests.get(url, stream=True, timeout=60) as response:
+        response.raise_for_status()
+        downloaded = 0
+        next_report = time.monotonic() + 5
+        with destination.open("wb") as file:
+            for chunk in response.iter_content(chunk_size=64 * 1024):
                 file.write(chunk)
+                downloaded += len(chunk)
+                now = time.monotonic()
+                if now >= next_report:
+                    log.info("Скачано %.1f МБ", downloaded / (1024 * 1024))
+                    next_report = now + 5
     with zipfile.ZipFile(destination) as zf:
         if zf.testzip() is not None:
             raise RuntimeError("Скачанный архив повреждён")
@@ -172,12 +178,14 @@ def relaunch(launcher_path: Path) -> None:
 
 
 def run(launcher_path: str, download_url: str) -> bool:
-    launcher_path_p = Path(launcher_path)
     temp_dir = Path(tempfile.gettempdir())
     zip_path = temp_dir / "mclauncher_update.zip"
     extract_dir = temp_dir / "mclauncher_update_extract"
 
     try:
+        # Windows может передать короткий путь 8.3. После переименования
+        # исходной папки этот путь перестаёт быть её псевдонимом.
+        launcher_path_p = Path(launcher_path).resolve(strict=True)
         if not wait_for_launcher_close(launcher_path_p):
             log.error("Не удалось дождаться закрытия лаунчера")
             return False

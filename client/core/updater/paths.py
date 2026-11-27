@@ -12,13 +12,12 @@ def updater_binary_path() -> Path:
 
 
 def cleanup_stale_updater() -> None:
-    """К моменту следующего запуска лаунчера апдейтер уже точно закрылся
-    (он сам его перезапускает и завершается), поэтому удалить оставшийся
-    файл во временной папке безопасно — в отличие от попытки апдейтера
-    удалить самого себя, пока он ещё выполняется (на Windows это вообще
-    невозможно, файл запущенного .exe заблокирован). Паттерн взят из
-    older_projects/GUI/console_launcher/launcher.py::_cleanup_updater."""
-    updater_binary_path().unlink(missing_ok=True)
+    """Удалить оставшийся апдейтер, если он уже завершился."""
+    try:
+        updater_binary_path().unlink(missing_ok=True)
+    except PermissionError:
+        # При перезапуске Windows может ещё держать запущенный EXE открытым.
+        pass
 
 
 def resolve_launcher_path(executable_path: str) -> Path:

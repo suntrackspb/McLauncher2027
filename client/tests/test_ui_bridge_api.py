@@ -1,3 +1,4 @@
+import subprocess
 from types import SimpleNamespace
 
 from core.api_client.client import ApiError
@@ -187,6 +188,7 @@ def test_start_update_in_nuitka_downloads_updater_and_closes_window(tmp_path, mo
     assert updater_path.read_bytes() == b"stub-binary"
     popen_mock.assert_called_once_with(
         [str(updater_path), str(launcher_dir), "http://x/win.zip"], cwd=updater_path.parent,
+        creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0),
     )
     api._window.destroy.assert_called_once()
 

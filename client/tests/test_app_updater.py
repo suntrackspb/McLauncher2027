@@ -112,8 +112,12 @@ def test_relaunch_opens_macos_bundle_with_open_command(mocker, tmp_path):
 
 
 def test_run_returns_false_when_launcher_does_not_close(mocker, tmp_path):
-    mocker.patch("updater.app_updater.wait_for_launcher_close", return_value=False)
-    assert run(str(tmp_path / "Launcher"), "http://example.com/update.zip") is False
+    launcher_path = tmp_path / "Launcher"
+    launcher_path.mkdir()
+    wait = mocker.patch("updater.app_updater.wait_for_launcher_close", return_value=False)
+
+    assert run(str(launcher_path / ".." / launcher_path.name), "http://example.com/update.zip") is False
+    wait.assert_called_once_with(launcher_path.resolve())
 
 
 def test_run_happy_path_calls_all_steps_in_order(mocker, tmp_path):

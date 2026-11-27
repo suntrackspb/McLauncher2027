@@ -36,6 +36,16 @@ def test_cleanup_stale_updater_is_noop_when_nothing_to_clean(mocker, tmp_path):
     cleanup_stale_updater()  # не должно бросать исключение
 
 
+def test_cleanup_stale_updater_does_not_block_startup_if_exe_is_locked(mocker):
+    locked = mocker.Mock()
+    locked.unlink.side_effect = PermissionError("file in use")
+    mocker.patch("core.updater.paths.updater_binary_path", return_value=locked)
+
+    cleanup_stale_updater()
+
+    locked.unlink.assert_called_once_with(missing_ok=True)
+
+
 def test_updater_binary_path_uses_platform_specific_name(mocker):
     mocker.patch("core.updater.paths.platform.system", return_value="Windows")
     assert updater_binary_path().name == "app_updater.exe"
