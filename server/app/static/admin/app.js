@@ -159,8 +159,13 @@ async function loadConnection() {
   state.connection = await api("/admin/server/connection").catch(() => null);
 }
 
+async function loadUpdaterUrls() {
+  const urls = await api("/admin/launcher/updater");
+  if (!updaterEdited) fillUpdaterForm(urls);
+}
+
 async function refreshAll() {
-  const results = await Promise.allSettled([loadProfile(), loadMods(), loadExtras(), loadConnection()]);
+  const results = await Promise.allSettled([loadProfile(), loadMods(), loadExtras(), loadConnection(), loadUpdaterUrls()]);
   renderAll();
   fillConnForm();
   const failed = results.find((r) => r.status === "rejected");
@@ -348,7 +353,16 @@ function renderOverview() {
   if (state.launcher === null) {
     checks.push({ level: "warn", title: "Не удалось проверить релиз лаунчера", detail: "Бэкенд не достучался до GitHub." });
   } else if (state.launcher.version) {
-    checks.push({ level: "ok", title: `Релиз лаунчера ${state.launcher.version}`, detail: "Лаунчеры со старой версией предложат обновиться." });
+    const missing = [];
+    if (!state.launcher.updater_url_windows) missing.push("Windows");
+    if (!state.launcher.updater_url_macos) missing.push("macOS");
+    checks.push({
+      level: missing.length ? "warn" : "ok",
+      title: `Релиз лаунчера ${state.launcher.version}`,
+      detail: missing.length
+        ? `Настройте ссылки на апдейтер для ${missing.join(", ")} в разделе «Подключение».`
+        : "Лаунчеры со старой версией предложат обновиться.",
+    });
   } else {
     checks.push({ level: "warn", title: "Релиз лаунчера не найден", detail: "Проверьте LAUNCHER_GITHUB_REPO в .env и наличие релиза на GitHub." });
   }
@@ -1283,6 +1297,38 @@ async function saveProfile(event) {
   }
 }
 
+// --- подключение: апдейтер лаунчера ------------------------------------------
+
+let updaterEdited = false;
+
+function fillUpdaterForm(urls) {
+  $("updater-url-windows").value = urls.updater_url_windows ?? "";
+  $("updater-url-macos").value = urls.updater_url_macos ?? "";
+  $("updater-save").disabled = false;
+}
+
+async function saveUpdaterUrls(event) {
+  event.preventDefault();
+  const button = $("updater-save");
+  const payload = {
+    updater_url_windows: $("updater-url-windows").value.trim() || null,
+    updater_url_macos: $("updater-url-macos").value.trim() || null,
+  };
+  button.disabled = true;
+  try {
+    const urls = await api("/admin/launcher/updater", jsonBody("PUT", payload));
+    updaterEdited = false;
+    fillUpdaterForm(urls);
+    if (state.launcher) Object.assign(state.launcher, urls);
+    renderOverview();
+    toast("Ссылки на апдейтер сохранены");
+  } catch (err) {
+    toast(err.message, true);
+  } finally {
+    button.disabled = false;
+  }
+}
+
 // --- подключение: доступ к файлам -----------------------------------------------
 
 const DEFAULT_PORTS = { sftp: 22, ftp: 21, ftps: 21 };
@@ -1513,6 +1559,8 @@ function init() {
   $("profile-form").addEventListener("change", () => { profileEdited = true; onProfileInput(); });
   $("profile-form").addEventListener("submit", saveProfile);
   $("profile-reset").addEventListener("click", fillProfileForm);
+  $("updater-form").addEventListener("input", () => { updaterEdited = true; });
+  $("updater-form").addEventListener("submit", saveUpdaterUrls);
   $("conn-form").addEventListener("submit", saveConnection);
   $("conn-protocol").addEventListener("change", onConnProtocol);
   $("conn-test").addEventListener("click", testConnection);

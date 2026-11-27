@@ -35,6 +35,8 @@ docker compose up --build
 - `GET /api/v1/hasJoined`, `POST /api/v1/join`, `GET /api/v1/profile` — Yggdrasil-сессия
 - `GET /api/v1/mods/manifest` — обязательные моды (`loader`, `mc_version`)
 - `GET /api/v1/mods/optional` — каталог опциональных модов
+- `GET /api/v1/launcher/version` — тег и ZIP из GitHub Releases, ссылки на апдейтер из настроек админки
+- `GET/PUT /api/v1/admin/launcher/updater` — ссылки на апдейтеры Windows и macOS (Bearer-токен)
 - `POST /api/v1/players/me/skin`, `.../cape` — загрузка скина/плаща (multipart:
   `uuid`+`access_token`+`file`), отдаются через `/textures/{skin|cape}/{hash}.png`
 - `POST /api/v1/admin/login` — пароль → JWT (12ч); `GET/POST /api/v1/admin/mods`,

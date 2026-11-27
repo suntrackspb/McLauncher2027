@@ -1,25 +1,22 @@
 import time
 
 import httpx
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.schemas.launcher import LauncherVersionOut
+from app.models.launcher_updater_settings import LauncherUpdaterSettings
+from app.schemas.launcher import LauncherVersionOut, UpdaterUrls
 
 _CACHE_TTL_SECONDS = 300
 _cache: dict = {"expires_at": 0.0, "value": None}
+_UPDATER_SETTINGS_ID = 1
 
 
-def _pick_asset_url(assets: list[dict], hint: str, *, zip_only: bool) -> str:
-    """Апдейтер и архив лаунчера могут делить один и тот же hint в имени
-    ('windows'/'macos'), поэтому дополнительно различаем их по расширению —
-    лаунчер всегда .zip (см. client-build.yml), апдейтер — голый бинарник."""
+def _pick_archive_url(assets: list[dict], hint: str) -> str:
     for asset in assets:
         name = asset.get("name", "").lower()
-        if hint.lower() not in name:
-            continue
-        if name.endswith(".zip") != zip_only:
-            continue
-        return asset.get("browser_download_url", "")
+        if hint.lower() in name and name.endswith(".zip"):
+            return asset.get("browser_download_url", "")
     return ""
 
 
@@ -27,8 +24,6 @@ _EMPTY_VERSION = LauncherVersionOut(
     version="",
     download_url_windows="",
     download_url_macos="",
-    updater_url_windows="",
-    updater_url_macos="",
 )
 
 
@@ -45,10 +40,8 @@ async def _fetch_latest_release() -> LauncherVersionOut:
     assets = data.get("assets", [])
     return LauncherVersionOut(
         version=data.get("tag_name", ""),
-        download_url_windows=_pick_asset_url(assets, settings.launcher_asset_windows_hint, zip_only=True),
-        download_url_macos=_pick_asset_url(assets, settings.launcher_asset_macos_hint, zip_only=True),
-        updater_url_windows=_pick_asset_url(assets, settings.launcher_asset_windows_hint, zip_only=False),
-        updater_url_macos=_pick_asset_url(assets, settings.launcher_asset_macos_hint, zip_only=False),
+        download_url_windows=_pick_archive_url(assets, settings.launcher_asset_windows_hint),
+        download_url_macos=_pick_archive_url(assets, settings.launcher_asset_macos_hint),
     )
 
 
@@ -69,3 +62,22 @@ async def get_latest_version() -> LauncherVersionOut:
     _cache["value"] = value
     _cache["expires_at"] = now + _CACHE_TTL_SECONDS
     return value
+
+
+async def get_updater_urls(db: AsyncSession) -> UpdaterUrls:
+    record = await db.get(LauncherUpdaterSettings, _UPDATER_SETTINGS_ID)
+    if record is None:
+        return UpdaterUrls(updater_url_windows=None, updater_url_macos=None)
+    return UpdaterUrls.model_validate(record)
+
+
+async def save_updater_urls(db: AsyncSession, urls: UpdaterUrls) -> UpdaterUrls:
+    record = await db.get(LauncherUpdaterSettings, _UPDATER_SETTINGS_ID)
+    if record is None:
+        record = LauncherUpdaterSettings(id=_UPDATER_SETTINGS_ID)
+        db.add(record)
+    values = urls.model_dump(mode="json")
+    record.updater_url_windows = values["updater_url_windows"]
+    record.updater_url_macos = values["updater_url_macos"]
+    await db.commit()
+    return urls

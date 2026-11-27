@@ -53,8 +53,8 @@ async def test_picks_assets_by_os_hint(mocker):
     assert result.version == "v1.2.0"
     assert result.download_url_windows == "http://x/win.zip"
     assert result.download_url_macos == "http://x/mac.zip"
-    assert result.updater_url_windows == "http://x/updater-win.exe"
-    assert result.updater_url_macos == "http://x/updater-mac"
+    assert result.updater_url_windows == ""
+    assert result.updater_url_macos == ""
 
 
 async def test_caches_result_between_calls(mocker):

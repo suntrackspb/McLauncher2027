@@ -6,8 +6,7 @@ class Settings(BaseSettings):
 
     database_url: str = "sqlite+aiosqlite:///./launcher.db"
 
-    # Репозиторий, где собираются клиент и updater (GitHub Releases) — бэкенд сам
-    # смотрит последний релиз, версию/ссылки на сборки вручную не прописываем.
+    # Репозиторий клиента: его последний GitHub Release задаёт версию и ZIP.
     launcher_github_repo: str = ""  # "owner/name"
     # Подстроки в имени asset'а релиза, по которым отличаем сборки под ОС.
     launcher_asset_windows_hint: str = "windows"

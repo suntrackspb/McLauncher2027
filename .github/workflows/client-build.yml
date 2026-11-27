@@ -11,10 +11,19 @@ on:
     paths:
       - "client/**"
       - ".github/workflows/client-build.yml"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: "Платформа для тестовой сборки"
+        type: choice
+        default: windows
+        options:
+          - windows
+          - macos
+          - all
 
 concurrency:
-  group: client-build-${{ github.ref }}
+  group: client-build-${{ github.ref }}-${{ github.event_name }}-${{ inputs.platform || 'all' }}
   cancel-in-progress: true
 
 permissions:
@@ -28,12 +37,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: windows-latest
-            platform: windows
-          - os: macos-latest
-            platform: macos
-    runs-on: ${{ matrix.os }}
+        platform: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.platform != 'all' && format('["{0}"]', inputs.platform) || '["windows","macos"]') }}
+    runs-on: ${{ matrix.platform }}-latest
     defaults:
       run:
         working-directory: client
@@ -43,6 +48,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
+          cache-dependency-path: client/requirements.txt
 
       - run: pip install -r requirements.txt
 
@@ -54,12 +61,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: windows-latest
-            platform: windows
-          - os: macos-latest
-            platform: macos
-    runs-on: ${{ matrix.os }}
+        platform: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.platform != 'all' && format('["{0}"]', inputs.platform) || '["windows","macos"]') }}
+    runs-on: ${{ matrix.platform }}-latest
+    env:
+      NUITKA_CACHE_DIR: ${{ github.workspace }}/.nuitka-cache
     defaults:
       run:
         working-directory: client
@@ -67,8 +72,18 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
+        id: python
         with:
           python-version: "3.12"
+          cache: pip
+          cache-dependency-path: client/requirements.txt
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ env.NUITKA_CACHE_DIR }}
+          key: nuitka-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.python.outputs.python-version }}-${{ hashFiles('client/requirements.txt') }}-${{ github.sha }}
+          restore-keys: |
+            nuitka-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.python.outputs.python-version }}-${{ hashFiles('client/requirements.txt') }}-
 
       - run: pip install -r requirements.txt
 
@@ -131,26 +146,13 @@ jobs:
           --macos-app-icon=assets/icon.icns
           app.py
 
-      # Апдейтер — отдельный релизный ассет, не кладём его в архив лаунчера
-      # (см. DEV_PLAN.md): лаунчер сам качает свежий app_updater с бэкенда
-      # только когда реально нужно обновиться, и удаляет его после работы.
-      - name: Build updater
-        run: >
-          python -m nuitka
-          --onefile
-          --assume-yes-for-downloads
-          --output-dir=dist
-          --output-filename=app_updater
-          updater/app_updater.py
-
       - name: Ad-hoc sign (macOS)
         if: matrix.platform == 'macos'
-        # Без подписи Gatekeeper объявляет скачанные .app/бинарник «повреждёнными» —
+        # Без подписи Gatekeeper объявляет скачанное .app «повреждённым» —
         # платного сертификата разработчика для этого проекта нет.
         run: |
           codesign --force --deep --sign - "dist/${APP_NAME}.app"
           codesign --verify --deep --strict --verbose=2 "dist/${APP_NAME}.app"
-          codesign --force --sign - "dist/app_updater"
 
       - name: Package launcher (Windows)
         if: matrix.platform == 'windows'
@@ -179,28 +181,10 @@ jobs:
         working-directory: client/dist
         run: ditto -c -k --sequesterRsrc --keepParent "$APP_NAME.app" "$APP_NAME-macos.zip"
 
-      - name: Rename updater binary
-        working-directory: client/dist
-        shell: bash
-        # Уникальное имя ассета в релизе + расширение отличает его от zip'а
-        # лаунчера — сервер (launcher_service.py) различает их по .zip vs нет.
-        run: |
-          if [ "${{ matrix.platform }}" = "windows" ]; then
-            mv app_updater.exe app_updater-windows.exe
-          else
-            mv app_updater app_updater-macos
-          fi
-
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ env.APP_NAME }}-${{ matrix.platform }}
           path: client/dist/${{ env.APP_NAME }}-${{ matrix.platform }}.zip
-          if-no-files-found: error
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: app_updater-${{ matrix.platform }}
-          path: client/dist/app_updater-${{ matrix.platform }}${{ matrix.platform == 'windows' && '.exe' || '' }}
           if-no-files-found: error
 
       - uses: actions/upload-artifact@v4
@@ -213,7 +197,7 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write
     steps:

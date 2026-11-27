@@ -1,12 +1,29 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, HttpUrl, field_validator
 
 
 class LauncherVersionOut(BaseModel):
     version: str
     download_url_windows: str
     download_url_macos: str
-    updater_url_windows: str
-    updater_url_macos: str
+    updater_url_windows: str = ""
+    updater_url_macos: str = ""
+
+
+class UpdaterUrls(BaseModel):
+    updater_url_windows: HttpUrl | None
+    updater_url_macos: HttpUrl | None
+
+    model_config = {"from_attributes": True}
+
+    @field_validator("updater_url_windows", "updater_url_macos")
+    @classmethod
+    def validate_updater_url(cls, url: HttpUrl | None) -> HttpUrl | None:
+        if url is not None and (
+            url.scheme != "https" or url.username is not None
+            or url.password is not None or url.fragment is not None
+        ):
+            raise ValueError("Укажите прямую HTTPS-ссылку без логина, пароля и фрагмента")
+        return url
 
 
 class AuthlibJarOut(BaseModel):

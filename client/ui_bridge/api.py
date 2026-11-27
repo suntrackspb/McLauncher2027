@@ -149,10 +149,11 @@ class LauncherApi:
         }
 
     def start_update(self, download_url: str, updater_url: str) -> dict:
-        """Качает свежий app_updater с бэкенда (сам он в архив лаунчера не
-        входит — см. DEV_PLAN.md), запускает его и закрывает лаунчер. Апдейтер
-        сам подменяет файлы, перезапускает лаунчер и удаляет себя (см.
-        client/updater/app_updater.py)."""
+        """Качает app_updater по ссылке из ответа бэкенда и запускает его.
+
+        Апдейтер подменяет файлы и перезапускает лаунчер. При запуске лаунчер
+        пытается удалить временный файл апдейтера.
+        """
         compiled = globals().get("__compiled__")
         if not (getattr(compiled, "standalone", False) or getattr(sys, "frozen", False)):
             return {"ok": False, "error": "Обновление доступно только в собранной версии лаунчера"}

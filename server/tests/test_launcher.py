@@ -20,6 +20,6 @@ async def test_version_endpoint_returns_service_result(client, mocker):
         "version": "v1.2.0",
         "download_url_windows": "http://x/win.zip",
         "download_url_macos": "http://x/mac.zip",
-        "updater_url_windows": "http://x/updater-win.exe",
-        "updater_url_macos": "http://x/updater-mac",
+        "updater_url_windows": "",
+        "updater_url_macos": "",
     }

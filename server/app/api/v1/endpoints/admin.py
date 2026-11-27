@@ -1,4 +1,5 @@
 import hmac
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel
@@ -9,9 +10,9 @@ from app.core import admin_auth
 from app.core.database import get_db
 from app.models.mod import ModType
 from app.schemas.admin import AdminLoginRequest, AdminLoginResponse, ServerProfileUpdate
-from app.schemas.launcher import ServerProfileOut
+from app.schemas.launcher import ServerProfileOut, UpdaterUrls
 from app.schemas.mod import ModOut, ModUpdate
-from app.services import mod_service, modrinth_service, profile_service
+from app.services import launcher_service, mod_service, modrinth_service, profile_service
 from app.services.errors import ServiceError
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -145,3 +146,15 @@ async def update_profile(payload: ServerProfileUpdate, db: AsyncSession = Depend
         server_port=payload.server_port,
         client_zip_url=payload.client_zip_url,
     )
+
+
+@router.get("/launcher/updater", dependencies=[Depends(require_admin)])
+async def get_launcher_updater(db: Annotated[AsyncSession, Depends(get_db)]) -> UpdaterUrls:
+    return await launcher_service.get_updater_urls(db)
+
+
+@router.put("/launcher/updater", dependencies=[Depends(require_admin)])
+async def update_launcher_updater(
+    payload: UpdaterUrls, db: Annotated[AsyncSession, Depends(get_db)],
+) -> UpdaterUrls:
+    return await launcher_service.save_updater_urls(db, payload)

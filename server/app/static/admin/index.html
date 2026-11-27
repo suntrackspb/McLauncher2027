@@ -193,6 +193,24 @@
             </div>
           </form>
 
+          <form id="updater-form" class="card">
+            <div class="card-head">
+              <h2>Апдейтер лаунчера</h2>
+              <p>Укажите прямые HTTPS-ссылки на файлы с вашего сайта. Пустое поле отключает автообновление для этой платформы.</p>
+            </div>
+            <div class="form-grid">
+              <label class="field">Windows
+                <input id="updater-url-windows" type="url" class="mono" maxlength="2083" placeholder="https://files.example.ru/app_updater-windows.exe" />
+              </label>
+              <label class="field">macOS
+                <input id="updater-url-macos" type="url" class="mono" maxlength="2083" placeholder="https://files.example.ru/app_updater-macos" />
+              </label>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary" id="updater-save" disabled>Сохранить ссылки</button>
+            </div>
+          </form>
+
           <form id="conn-form" class="card" novalidate autocomplete="off">
             <div class="card-head">
               <h2>Доступ к файлам сервера</h2>

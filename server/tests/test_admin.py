@@ -2,6 +2,7 @@ import secrets
 import pytest
 
 from app.core.config import settings
+from app.schemas.launcher import LauncherVersionOut
 
 # Случайный на каждый прогон — без строковых литералов, на которые
 # срабатывают сканеры секретов (GitGuardian).
@@ -37,6 +38,47 @@ async def test_login_wrong_password(client):
 async def test_mods_list_requires_auth(client):
     resp = await client.get("/api/v1/admin/mods")
     assert resp.status_code == 401
+
+
+async def test_admin_updater_urls_are_used_by_existing_launcher_api(client, mocker):
+    mocker.patch(
+        "app.services.launcher_service.get_latest_version",
+        return_value=LauncherVersionOut(
+            version="v1.2.0",
+            download_url_windows="https://downloads.example.com/launcher-windows.zip",
+            download_url_macos="https://downloads.example.com/launcher-macos.zip",
+        ),
+    )
+    endpoint = "/api/v1/admin/launcher/updater"
+    urls = {
+        "updater_url_windows": "https://files.example.com/app_updater-windows.exe",
+        "updater_url_macos": "https://files.example.com/app_updater-macos",
+    }
+    assert (await client.get(endpoint)).status_code == 401
+    assert (await client.put(endpoint, json=urls)).status_code == 401
+
+    token = await _admin_token(client)
+    headers = {"Authorization": f"Bearer {token}"}
+    assert (await client.get(endpoint, headers=headers)).json() == dict.fromkeys(urls)
+
+    rejected = await client.put(
+        endpoint, headers=headers,
+        json={**urls, "updater_url_windows": "http://files.example.com/app_updater-windows.exe"},
+    )
+    assert rejected.status_code == 422
+    saved = await client.put(endpoint, headers=headers, json=urls)
+    assert saved.status_code == 200
+    assert (await client.get(endpoint, headers=headers)).json() == urls
+    response = await client.get("/api/v1/launcher/version")
+    assert response.json() == {
+        "version": "v1.2.0",
+        "download_url_windows": "https://downloads.example.com/launcher-windows.zip",
+        "download_url_macos": "https://downloads.example.com/launcher-macos.zip",
+        **urls,
+    }
+
+    await client.put(endpoint, headers=headers, json={**urls, "updater_url_macos": None})
+    assert (await client.get("/api/v1/launcher/version")).json()["updater_url_macos"] == ""
 
 
 async def test_mods_list_rejects_bad_token(client):

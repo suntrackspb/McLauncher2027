@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,11 +12,14 @@ router = APIRouter(prefix="/launcher", tags=["launcher"])
 
 
 @router.get("/version", response_model=LauncherVersionOut)
-async def version() -> LauncherVersionOut:
-    """Последний релиз GitHub-репозитория сборки (см. LAUNCHER_GITHUB_REPO).
-    Клиент сравнивает `version` (git tag) со своей вшитой версией и, если она
-    новее, предлагает запустить отдельный updater-процесс (см. client/updater/)."""
-    return await launcher_service.get_latest_version()
+async def version(db: Annotated[AsyncSession, Depends(get_db)]) -> LauncherVersionOut:
+    """Версия и ZIP из GitHub Releases, ссылки на апдейтер из админки."""
+    release = await launcher_service.get_latest_version()
+    urls = await launcher_service.get_updater_urls(db)
+    return release.model_copy(update={
+        "updater_url_windows": str(urls.updater_url_windows or ""),
+        "updater_url_macos": str(urls.updater_url_macos or ""),
+    })
 
 
 @router.get("/profile", response_model=ServerProfileOut, response_model_exclude_defaults=True)
